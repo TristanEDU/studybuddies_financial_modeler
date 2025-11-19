@@ -26,6 +26,25 @@ const ValidationUtils = {
   }
 };
 
+const resolvePath = (source, path) => {
+  if (!path || !source || typeof source !== 'object') return undefined;
+  const keys = path?.split('.');
+  let current = source;
+
+  for (const key of keys) {
+    if (!current || typeof current !== 'object') {
+      return undefined;
+    }
+    current = current?.[key];
+  }
+
+  return current;
+};
+
+const formatKeyLabel = (key = '') => key
+  ?.replace(/[_-]/g, ' ')
+  ?.replace(/\b\w/g, (letter) => letter?.toUpperCase());
+
 // Debounced input handler
 const useDebouncedCallback = (callback, delay) => {
   const timeoutRef = useRef(null);
@@ -64,17 +83,15 @@ const CostInputPanel = ({
   onToggleCategory, 
   onRemoveItem,
   onAddCategory,
+  onAddStandardCategory,
+  onRemoveCategory,
+  standardCategories = {},
   openDropdown, 
   closeAllDropdowns, 
   currentOpenDropdown 
 }) => {
   const [state, setState] = useState({
-    expandedCategories: {
-      personnel: true,
-      operations: true,
-      marketing: true,
-      technology: true
-    },
+    expandedCategories: {},
     currency: 'USD',
     period: 'monthly',
     showAddCategory: false,
@@ -98,6 +115,20 @@ const CostInputPanel = ({
   const currencyRef = useRef();
   const periodRef = useRef();
   const containerRef = useRef();
+  const getRootCategory = useCallback((categoryPath = '') => categoryPath?.split('.')?.[0] || '', []);
+  const getCategoryData = useCallback((categoryPath) => {
+    if (!categoryPath) return null;
+    return resolvePath(costs, categoryPath);
+  }, [costs]);
+  const isPersonnelRoleField = useCallback((categoryPath, fieldPath) => {
+    return getRootCategory(categoryPath) === 'personnel' && fieldPath?.startsWith('employees.roles.');
+  }, [getRootCategory]);
+  const getQuantityFieldPath = useCallback((categoryPath, fieldPath) => {
+    if (isPersonnelRoleField(categoryPath, fieldPath)) {
+      return `${fieldPath}.count`;
+    }
+    return `${fieldPath}_quantity`;
+  }, [isPersonnelRoleField]);
 
   // Currency and period options
   const currencies = useMemo(() => [
@@ -118,17 +149,23 @@ const CostInputPanel = ({
     { value: 'annually', label: 'Annually' }
   ], []);
 
-  // Employee roles with proper defaults
-  const employeeRoleOptions = useMemo(() => [
-    { value: 'ceo', label: 'CEO', defaultValue: 25000, minValue: 0, maxValue: 100000, step: 1000 },
-    { value: 'cto', label: 'CTO', defaultValue: 20000, minValue: 0, maxValue: 80000, step: 1000 },
-    { value: 'senior-dev', label: 'Senior Developer', defaultValue: 12000, minValue: 0, maxValue: 30000, step: 500 },
-    { value: 'mid-dev', label: 'Mid-level Developer', defaultValue: 8000, minValue: 0, maxValue: 18000, step: 500 },
-    { value: 'junior-dev', label: 'Junior Developer', defaultValue: 5000, minValue: 0, maxValue: 12000, step: 250 },
-    { value: 'designer', label: 'UI/UX Designer', defaultValue: 7000, minValue: 0, maxValue: 15000, step: 500 },
-    { value: 'product-manager', label: 'Product Manager', defaultValue: 11000, minValue: 0, maxValue: 25000, step: 500 },
-    { value: 'qa-engineer', label: 'QA Engineer', defaultValue: 6000, minValue: 0, maxValue: 16000, step: 250 }
-  ], []);
+  const standardCategoryList = useMemo(() => Object.values(standardCategories || {}), [standardCategories]);
+  const activeStandardCategoryKeys = useMemo(() => (
+    Object.keys(standardCategories || {})?.filter(key => costs?.[key])
+  ), [standardCategories, costs]);
+  const additionalCategories = useMemo(() => (
+    Object.entries(costs || {})
+      ?.filter(([key]) => key !== 'customCategories' && !standardCategories?.[key])
+      ?.map(([key, value]) => ({ key, data: value }))
+  ), [costs, standardCategories]);
+  const customCategoryEntries = useMemo(() => (
+    Object.entries(costs?.customCategories || {})
+  ), [costs]);
+  const hasActiveCategories = useMemo(() => (
+    (activeStandardCategoryKeys?.length || 0) > 0 ||
+    (additionalCategories?.length || 0) > 0 ||
+    (customCategoryEntries?.length || 0) > 0
+  ), [activeStandardCategoryKeys, additionalCategories, customCategoryEntries]);
 
   // Debounced cost change handler
   const debouncedCostChange = useDebouncedCallback((category, field, value) => {
@@ -233,6 +270,13 @@ const CostInputPanel = ({
     }
   }, [onToggleCategory]);
 
+  const toggleCustomCategoryModal = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      showAddCategory: !prev?.showAddCategory
+    }));
+  }, []);
+
   // Slider change handler
   const handleSliderChange = useCallback((category, field, value) => {
     const numValue = parseFloat(value);
@@ -245,10 +289,10 @@ const CostInputPanel = ({
   const handleQuantityChange = useCallback((category, field, quantity) => {
     const numQuantity = parseInt(quantity);
     if (ValidationUtils?.validateEmployeeCount(numQuantity) || numQuantity === 0) {
-      const quantityField = `${field}_quantity`;
+      const quantityField = getQuantityFieldPath(category, field);
       debouncedCostChange(category, quantityField, numQuantity);
     }
-  }, [debouncedCostChange]);
+  }, [debouncedCostChange, getQuantityFieldPath]);
 
   // Custom amount handlers
   const handleCustomAmountClick = useCallback((category, field, currentValue) => {
@@ -303,61 +347,42 @@ const CostInputPanel = ({
   // ENHANCED: Get cost value with proper type checking
   const getCostValue = useCallback((category, field) => {
     try {
-      if (!costs || typeof costs !== 'object') return 0;
-      
-      const categoryData = costs?.[category];
+      if (!field) return 0;
+      const categoryData = getCategoryData(category);
       if (!categoryData || typeof categoryData !== 'object') return 0;
-      
-      const keys = field?.split('.');
-      let current = categoryData;
-      
-      for (const key of keys) {
-        if (!current || typeof current !== 'object' || Array.isArray(current)) {
-          return 0;
-        }
-        current = current?.[key];
-      }
-      
-      return Number(current) || 0;
+      const value = resolvePath(categoryData, field);
+      return typeof value === 'number' ? value : Number(value) || 0;
     } catch (error) {
       console.error('Error getting cost value:', error);
       return 0;
     }
-  }, [costs]);
+  }, [getCategoryData]);
 
   // ENHANCED: Get quantity value with proper validation  
   const getQuantityValue = useCallback((category, field) => {
     try {
-      if (!costs || typeof costs !== 'object') return 1;
-      
-      const categoryData = costs?.[category];
+      if (!field) return 1;
+      const categoryData = getCategoryData(category);
       if (!categoryData || typeof categoryData !== 'object') return 1;
-      
-      const quantityField = `${field}_quantity`;
-      const keys = quantityField?.split('.');
-      let current = categoryData;
-      
-      for (const key of keys) {
-        if (!current || typeof current !== 'object' || Array.isArray(current)) {
-          return 1;
-        }
-        current = current?.[key];
-      }
-      
-      return Number(current) || 1;
+      const quantityField = getQuantityFieldPath(category, field);
+      const quantity = resolvePath(categoryData, quantityField);
+      return typeof quantity === 'number' ? quantity : Number(quantity) || 1;
     } catch (error) {
       console.error('Error getting quantity value:', error);
       return 1;
     }
-  }, [costs]);
+  }, [getCategoryData, getQuantityFieldPath]);
 
   // ENHANCED: Slider input with proper error handling and remove functionality
   const renderSliderInput = useCallback((category, field, defaultValue, min, max, step, label, unit, disabled = false) => {
     const errorKey = `${category}.${field}`;
     const hasError = state?.errors?.[errorKey];
-    const currentValue = getCostValue(category, field) || defaultValue || 0;
+    const storedValue = getCostValue(category, field);
+    const currentValue = storedValue ?? defaultValue ?? 0;
     const currentQuantity = getQuantityValue(category, field);
     const totalCost = currentValue * currentQuantity;
+    const isPersonnelRole = isPersonnelRoleField(category, field);
+    const quantityField = getQuantityFieldPath(category, field);
     
     return (
       <div className="space-y-3">
@@ -390,10 +415,10 @@ const CostInputPanel = ({
                 if (window.confirm(`Remove ${label}? This action cannot be undone.`)) {
                   if (onRemoveItem) {
                     onRemoveItem(category, field);
-                  } else {
-                    // Fallback to setting value to 0
-                    debouncedCostChange(category, field, 0);
-                    debouncedCostChange(category, `${field}_quantity`, 0);
+                  }
+                  onCostChange(category, field, null);
+                  if (!isPersonnelRole) {
+                    onCostChange(category, quantityField, null);
                   }
                 }
               }}
@@ -496,7 +521,7 @@ const CostInputPanel = ({
         )}
       </div>
     );
-  }, [state?.errors, handleCustomAmountClick, handleSliderChange, handleQuantityChange, getCostValue, getQuantityValue, formatCurrency, debouncedCostChange, onRemoveItem]);
+  }, [state?.errors, handleCustomAmountClick, handleSliderChange, handleQuantityChange, getCostValue, getQuantityValue, formatCurrency, onRemoveItem, onCostChange, isPersonnelRoleField, getQuantityFieldPath]);
 
   // Category type options
   const categoryTypeOptions = useMemo(() => [
@@ -508,77 +533,151 @@ const CostInputPanel = ({
   // Helper to get expanded state
   const expandedCategories = useMemo(() => state?.expandedCategories, [state?.expandedCategories]);
 
-  // ENHANCED: Category section with improved item counting
-  const renderCategorySection = useCallback((categoryKey, iconName, title, defaultItems) => {
-    const isExpanded = expandedCategories?.[categoryKey];
-    
-    // FIXED: Proper item counting with structure validation
-    const getCategoryItemCount = () => {
-      try {
-        if (!costs || typeof costs !== 'object') return 0;
-        
-        const categoryData = costs?.[categoryKey];
-        if (!categoryData || typeof categoryData !== 'object') return 0;
-        
-        if (categoryKey === 'personnel') {
-          const rolesCount = categoryData?.employees?.roles ? Object.keys(categoryData?.employees?.roles)?.length : 0;
-          const contractorsCount = categoryData?.contractors?.types ? Object.keys(categoryData?.contractors?.types)?.length : 0;
-          return rolesCount + contractorsCount;
-        } else if (['operations', 'marketing', 'technology']?.includes(categoryKey)) {
-          return categoryData?.items ? Object.keys(categoryData?.items)?.length : 0;
-        } else {
-          // Custom categories
-          return categoryData?.items ? Object.keys(categoryData?.items)?.length : 0;
-        }
-      } catch (error) {
-        console.error('Error counting items:', error);
-        return 0;
-      }
-    };
+  const handleTemplateItemAdd = useCallback((categoryPath, templateItem) => {
+    if (!templateItem?.value) return;
+    const rootCategory = getRootCategory(categoryPath);
+    const itemKey = templateItem?.value?.split('.')?.pop();
+    if (!itemKey) return;
 
-    const itemCount = getCategoryItemCount();
+    if (rootCategory === 'personnel') {
+      onCostChange('personnel', `employees.roles.${itemKey}`, {
+        name: templateItem?.label,
+        label: templateItem?.label,
+        value: templateItem?.defaultValue || 0,
+        minValue: templateItem?.minValue || 0,
+        maxValue: templateItem?.maxValue || 100000,
+        step: templateItem?.step || 100,
+        enabled: true,
+        count: 1
+      });
+    } else {
+      onCostChange(categoryPath, `items.${itemKey}`, {
+        name: templateItem?.label,
+        label: templateItem?.label,
+        value: templateItem?.defaultValue || 0,
+        minValue: templateItem?.minValue || 0,
+        maxValue: templateItem?.maxValue || 100000,
+        step: templateItem?.step || 100,
+        enabled: true
+      });
+      onCostChange(categoryPath, `items.${itemKey}_quantity`, 1);
+    }
+  }, [onCostChange, getRootCategory]);
+
+  // ENHANCED: Category section with improved item counting
+  const renderCategorySection = useCallback(({
+    categoryKey,
+    categoryPath = categoryKey,
+    iconName,
+    title,
+    defaultItems = [],
+    onDeleteCategory
+  }) => {
+    const isExpanded = expandedCategories?.[categoryKey];
+    const categoryData = getCategoryData(categoryPath);
+    const rootCategory = getRootCategory(categoryPath);
+
+    const derivedItems = (() => {
+      try {
+        if (!categoryData || typeof categoryData !== 'object') return [];
+        if (rootCategory === 'personnel') {
+          const roles = resolvePath(categoryData, 'employees.roles');
+          if (!roles || typeof roles !== 'object') return [];
+          return Object.entries(roles)?.map(([key, role]) => ({
+            value: `employees.roles.${key}`,
+            label: role?.label || role?.name || formatKeyLabel(key),
+            defaultValue: role?.value || 0,
+            minValue: role?.minValue || 0,
+            maxValue: role?.maxValue || 100000,
+            step: role?.step || 100
+          }));
+        }
+        const items = categoryData?.items;
+        if (!items || typeof items !== 'object') return [];
+        return Object.entries(items)
+          ?.filter(([key]) => !key?.endsWith('_quantity'))
+          ?.map(([key, item]) => ({
+            value: `items.${key}`,
+            label: item?.label || item?.name || formatKeyLabel(key),
+            defaultValue: item?.value || 0,
+            minValue: item?.minValue || 0,
+            maxValue: item?.maxValue || 100000,
+            step: item?.step || 100
+          }));
+      } catch (error) {
+        console.error('Error deriving items:', error);
+        return [];
+      }
+    })();
+
+    const itemsToRender = derivedItems;
+    const itemCount = itemsToRender?.length || 0;
+    const showTemplateSuggestions = defaultItems?.length > 0;
     
     return (
       <div key={categoryKey} className="space-y-4 mb-6">
-        <button
-          onClick={() => toggleCategory(categoryKey, !isExpanded)}
-          className="flex items-center justify-between w-full p-4 bg-gradient-to-r from-primary/10 to-primary/5 border-2 border-primary/20 rounded-lg hover:from-primary/15 hover:to-primary/10 transition-all"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="p-2 bg-primary/20 rounded-lg">
-              <Icon name={iconName} size={20} className="text-primary" />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => toggleCategory(categoryKey, !isExpanded)}
+            className="flex items-center justify-between flex-1 p-4 bg-gradient-to-r from-primary/10 to-primary/5 border-2 border-primary/20 rounded-lg hover:from-primary/15 hover:to-primary/10 transition-all text-left"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-primary/20 rounded-lg">
+                <Icon name={iconName} size={20} className="text-primary" />
+              </div>
+              <div className="text-left">
+                <span className="font-semibold text-foreground text-base">{title}</span>
+                <span className="text-xs text-muted-foreground ml-2">
+                  {itemCount} items
+                </span>
+              </div>
             </div>
-            <div className="text-left">
-              <span className="font-semibold text-foreground text-base">{title}</span>
-              <span className="text-xs text-muted-foreground ml-2">
-                {itemCount} items
-              </span>
-            </div>
-          </div>
-          <Icon 
-            name={isExpanded ? "ChevronUp" : "ChevronDown"} 
-            size={18} 
-            className="text-muted-foreground" 
-          />
-        </button>
+            <Icon 
+              name={isExpanded ? "ChevronUp" : "ChevronDown"} 
+              size={18} 
+              className="text-muted-foreground" 
+            />
+          </button>
+          {onDeleteCategory && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e?.stopPropagation();
+                onDeleteCategory();
+              }}
+              className="h-10 w-10 text-destructive hover:text-destructive/80"
+            >
+              <Icon name="Trash2" size={14} />
+            </Button>
+          )}
+        </div>
         {isExpanded && (
           <div className="space-y-4 pl-4">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {defaultItems?.map(item => (
-                <div key={item?.value} className="bg-card border border-border rounded-lg p-4">
-                  {renderSliderInput(
-                    categoryKey,
-                    item?.value,
-                    item?.defaultValue,
-                    item?.minValue,
-                    item?.maxValue,
-                    item?.step,
-                    item?.label,
-                    state?.currency
-                  )}
-                </div>
-              ))}
-            </div>
+            {itemsToRender?.length === 0 && (
+              <div className="bg-muted/20 border border-dashed border-border/50 rounded-lg p-4 text-sm text-muted-foreground">
+                No line items yet. Use “Add Custom Item” below to start tracking this category.
+              </div>
+            )}
+            {itemsToRender?.length > 0 && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {itemsToRender?.map(item => (
+                  <div key={`${categoryPath}-${item?.value}`} className="bg-card border border-border rounded-lg p-4">
+                    {renderSliderInput(
+                      categoryPath,
+                      item?.value,
+                      item?.defaultValue,
+                      item?.minValue,
+                      item?.maxValue,
+                      item?.step,
+                      item?.label,
+                      state?.currency
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
             
             {/* ENHANCED: Add Item Button */}
             <div className="bg-muted/20 border border-dashed border-border/50 rounded-lg p-4">
@@ -589,7 +688,7 @@ const CostInputPanel = ({
                   setState(prev => ({
                     ...prev,
                     showAddItemModal: true,
-                    selectedCategory: categoryKey,
+                    selectedCategory: categoryPath,
                     newItemForm: {
                       name: '',
                       value: 0,
@@ -603,12 +702,34 @@ const CostInputPanel = ({
                 <Icon name="Plus" size={14} className="mr-2" />
                 Add Custom Item
               </Button>
+              {showTemplateSuggestions && (
+                <div className="mt-3">
+                  <p className="text-xs text-muted-foreground mb-2">Quick add suggestions</p>
+                  <div className="flex flex-wrap gap-2">
+                    {defaultItems?.map((item) => {
+                      const exists = categoryData && resolvePath(categoryData, item?.value);
+                      return (
+                        <Button
+                          key={`${categoryKey}-template-${item?.value}`}
+                          variant="outline"
+                          size="xs"
+                          disabled={exists}
+                          onClick={() => handleTemplateItemAdd(categoryPath, item)}
+                          className="text-xs"
+                        >
+                          {exists ? 'Added' : 'Add'} {item?.label}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
       </div>
     );
-  }, [expandedCategories, toggleCategory, renderSliderInput, state?.currency, costs]);
+  }, [expandedCategories, toggleCategory, renderSliderInput, state?.currency, getCategoryData, getRootCategory, handleTemplateItemAdd]);
 
   // ENHANCED: Add category handler with proper validation
   const handleAddCategory = useCallback(() => {
@@ -650,6 +771,28 @@ const CostInputPanel = ({
     }
   }, [state, onCostChange, onAddCategory]);
 
+  const handleStandardCategoryAdd = useCallback((categoryKey) => {
+    if (!onAddStandardCategory) return;
+    onAddStandardCategory(categoryKey);
+    setState(prev => ({
+      ...prev,
+      expandedCategories: { ...prev?.expandedCategories, [categoryKey]: true }
+    }));
+  }, [onAddStandardCategory]);
+
+  const handleDeleteCategory = useCallback((categoryKey, categoryPath, title) => {
+    if (!onRemoveCategory) return;
+    const label = title || formatKeyLabel(categoryKey);
+    if (window.confirm(`Remove ${label}? This will delete all items in the category.`)) {
+      onRemoveCategory(categoryPath);
+      setState(prev => {
+        const expanded = { ...(prev?.expandedCategories || {}) };
+        delete expanded[categoryKey];
+        return { ...prev, expandedCategories: expanded };
+      });
+    }
+  }, [onRemoveCategory]);
+
   // FIXED: Add item handler with proper nested structure using onCostChange
   const handleAddItem = useCallback(() => {
     try {
@@ -657,9 +800,10 @@ const CostInputPanel = ({
       if (selectedCategory && newItemForm?.name) {
         const sanitizedName = ValidationUtils?.sanitizeInput(newItemForm?.name);
         const itemKey = sanitizedName?.toLowerCase()?.replace(/\s+/g, '_');
+        const rootCategory = getRootCategory(selectedCategory);
         
         // CRITICAL FIX: Use onCostChange instead of setCosts
-        if (selectedCategory === 'personnel') {
+        if (rootCategory === 'personnel') {
           // Personnel has different structure - add to roles
           onCostChange('personnel', `employees.roles.${itemKey}`, {
             name: sanitizedName,
@@ -670,8 +814,8 @@ const CostInputPanel = ({
             enabled: true,
             count: newItemForm?.quantity || 1
           });
-        } else if (['operations', 'marketing', 'technology']?.includes(selectedCategory)) {
-          // Standard categories - add to items object
+        } else {
+          // Standard and custom categories share the same structure now
           onCostChange(selectedCategory, `items.${itemKey}`, {
             name: sanitizedName,
             value: newItemForm?.value || 0,
@@ -683,19 +827,6 @@ const CostInputPanel = ({
           });
           // Also set quantity
           onCostChange(selectedCategory, `items.${itemKey}_quantity`, newItemForm?.quantity || 1);
-        } else {
-          // Custom categories - add to customCategories[category].items
-          onCostChange('customCategories', `${selectedCategory}.items.${itemKey}`, {
-            name: sanitizedName,
-            value: newItemForm?.value || 0,
-            minValue: 0,
-            maxValue: 100000,
-            step: 100,
-            enabled: true,
-            label: sanitizedName
-          });
-          // Also set quantity
-          onCostChange('customCategories', `${selectedCategory}.items.${itemKey}_quantity`, newItemForm?.quantity || 1);
         }
         
         setState(prev => ({
@@ -718,7 +849,7 @@ const CostInputPanel = ({
         errors: { ...prev?.errors, addItem: 'Failed to add item. Please try again.' }
       }));
     }
-  }, [state, onCostChange]);
+  }, [state, onCostChange, getRootCategory]);
 
   return (
     <ErrorBoundary fallback={<div className="text-red-500">Something went wrong. Please refresh.</div>}>
@@ -822,7 +953,7 @@ const CostInputPanel = ({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setState(prev => ({ ...prev, showAddCategory: !prev?.showAddCategory }))}
+              onClick={toggleCustomCategoryModal}
               className="flex items-center space-x-2"
               disabled={state?.isLoading}
             >
@@ -831,6 +962,73 @@ const CostInputPanel = ({
             </Button>
           </div>
         </div>
+
+        {/* Category Library */}
+        {standardCategoryList?.length > 0 && (
+          <div className="bg-muted/20 border border-border rounded-lg p-4 mb-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center space-x-3">
+                <Icon name="Layers" size={18} className="text-primary" />
+                <div>
+                  <h4 className="text-sm font-semibold text-foreground">Category Library</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Activate standard categories or add your own custom structure.
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={toggleCustomCategoryModal}
+                className="w-full sm:w-auto"
+              >
+                <Icon name="FolderPlus" size={14} className="mr-2" />
+                Add Custom Category
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mt-4">
+              {standardCategoryList?.map(category => {
+                const isActive = Boolean(costs?.[category?.key]);
+                return (
+                  <div
+                    key={category?.key}
+                    className={`rounded-lg border p-3 flex flex-col space-y-3 ${
+                      isActive ? 'border-primary/40 bg-primary/5' : 'border-dashed border-border/70'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <div className="p-2 rounded-md bg-primary/10 text-primary">
+                        <Icon name={category?.iconName || 'FolderPlus'} size={16} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{category?.title}</p>
+                        <p className="text-xs text-muted-foreground">{category?.description}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">
+                        {isActive ? 'Active' : 'Available'}
+                      </span>
+                      <Button
+                        variant={isActive ? 'destructive' : 'outline'}
+                        size="xs"
+                        onClick={() => {
+                          if (isActive) {
+                            handleDeleteCategory(category?.key, category?.key, category?.title);
+                          } else {
+                            handleStandardCategoryAdd(category?.key);
+                          }
+                        }}
+                      >
+                        {isActive ? 'Remove' : 'Add'}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Error Messages */}
         {Object.keys(state?.errors)?.length > 0 && (
@@ -1085,85 +1283,42 @@ const CostInputPanel = ({
           </div>
         )}
 
-        {/* Personnel Costs */}
-        {renderCategorySection('personnel', 'Users', 'Personnel Costs', employeeRoleOptions)}
+        {!hasActiveCategories && (
+          <div className="border border-dashed border-border rounded-lg p-6 text-center text-sm text-muted-foreground">
+            No categories are active yet. Use the library above or create a custom category to get started.
+          </div>
+        )}
 
-        {/* Operations Costs */}
-        {renderCategorySection('operations', 'Building', 'Operations & Facilities', [
-          { value: 'rent', label: 'Office Rent', defaultValue: 8000, minValue: 0, maxValue: 25000, step: 500 },
-          { value: 'utilities', label: 'Utilities', defaultValue: 1200, minValue: 0, maxValue: 5000, step: 100 },
-          { value: 'insurance', label: 'Insurance', defaultValue: 800, minValue: 0, maxValue: 3000, step: 100 },
-          { value: 'cleaning', label: 'Cleaning Services', defaultValue: 600, minValue: 0, maxValue: 2000, step: 100 },
-          { value: 'security', label: 'Security', defaultValue: 1000, minValue: 0, maxValue: 3000, step: 100 },
-          { value: 'maintenance', label: 'Maintenance', defaultValue: 800, minValue: 0, maxValue: 2500, step: 100 }
-        ])}
-
-        {/* Marketing Costs */}
-        {renderCategorySection('marketing', 'Megaphone', 'Marketing & Sales', [
-          { value: 'digital-ads', label: 'Digital Advertising', defaultValue: 15000, minValue: 0, maxValue: 100000, step: 1000 },
-          { value: 'content', label: 'Content Marketing', defaultValue: 5000, minValue: 0, maxValue: 25000, step: 500 },
-          { value: 'seo', label: 'SEO Services', defaultValue: 3000, minValue: 0, maxValue: 15000, step: 500 },
-          { value: 'social-media', label: 'Social Media Management', defaultValue: 2500, minValue: 0, maxValue: 10000, step: 250 },
-          { value: 'events', label: 'Events & Conferences', defaultValue: 8000, minValue: 0, maxValue: 50000, step: 1000 },
-          { value: 'pr', label: 'Public Relations', defaultValue: 4000, minValue: 0, maxValue: 15000, step: 500 }
-        ])}
-
-        {/* Technology Costs */}
-        {renderCategorySection('technology', 'Server', 'Technology & Infrastructure', [
-          { value: 'software', label: 'Software Licenses', defaultValue: 2500, minValue: 0, maxValue: 15000, step: 250 },
-          { value: 'infrastructure', label: 'Cloud Infrastructure', defaultValue: 3500, minValue: 0, maxValue: 20000, step: 500 },
-          { value: 'tools', label: 'Development Tools', defaultValue: 1500, minValue: 0, maxValue: 8000, step: 200 },
-          { value: 'security', label: 'Security Tools', defaultValue: 1200, minValue: 0, maxValue: 5000, step: 200 },
-          { value: 'analytics', label: 'Analytics & Monitoring', defaultValue: 800, minValue: 0, maxValue: 3000, step: 100 },
-          { value: 'backup', label: 'Backup & Recovery', defaultValue: 600, minValue: 0, maxValue: 2000, step: 100 }
-        ])}
-
-        {/* ENHANCED: Custom Categories with better validation */}
-        {costs && typeof costs === 'object' && Object.entries(costs)?.filter(([key]) => 
-          !['personnel', 'operations', 'marketing', 'technology']?.includes(key)
-        )?.map(([categoryKey, categoryData]) => {
-          if (!categoryData || typeof categoryData !== 'object' || categoryKey === 'customCategories') {
-            return null;
-          }
-          
-          // Get all items (excluding quantity fields and metadata)
-          const items = Object.entries(categoryData)?.filter(([key, value]) => 
-              key === 'items' && value && typeof value === 'object'
-            )?.flatMap(([, itemsObj]) => 
-              Object.entries(itemsObj)?.map(([itemKey, itemValue]) => ({
-                value: itemKey,
-                label: itemKey?.replace(/_/g, ' ')?.replace(/\b\w/g, l => l?.toUpperCase()),
-                defaultValue: itemValue?.value || 0,
-                minValue: itemValue?.minValue || 0,
-                maxValue: itemValue?.maxValue || 100000,
-                step: itemValue?.step || 100
-              }))
-            );
-
-          if (items?.length === 0) return null;
-
-          return renderCategorySection(categoryKey, 'FolderPlus', categoryKey?.replace(/_/g, ' ')?.replace(/\b\w/g, l => l?.toUpperCase()), items);
+        {activeStandardCategoryKeys?.map(categoryKey => {
+          const config = standardCategories?.[categoryKey];
+          if (!config) return null;
+          return renderCategorySection({
+            categoryKey,
+            categoryPath: categoryKey,
+            iconName: config?.iconName || 'FolderPlus',
+            title: config?.title || formatKeyLabel(categoryKey),
+            defaultItems: config?.defaultItems || [],
+            onDeleteCategory: () => handleDeleteCategory(categoryKey, categoryKey, config?.title)
+          });
         })}
 
-        {/* Handle customCategories specifically */}
-        {costs?.customCategories && typeof costs?.customCategories === 'object' && 
-          Object.entries(costs?.customCategories)?.map(([categoryKey, categoryData]) => {
-            if (!categoryData || typeof categoryData !== 'object' || !categoryData?.items) {
-              return null;
-            }
-            
-            const items = Object.entries(categoryData?.items)?.map(([itemKey, itemValue]) => ({
-              value: itemKey,
-              label: itemValue?.label || itemKey?.replace(/_/g, ' ')?.replace(/\b\w/g, l => l?.toUpperCase()),
-              defaultValue: itemValue?.value || 0,
-              minValue: itemValue?.minValue || 0,
-              maxValue: itemValue?.maxValue || 100000,
-              step: itemValue?.step || 100
-            }));
+        {additionalCategories?.map(({ key }) => renderCategorySection({
+          categoryKey: key,
+          categoryPath: key,
+          iconName: 'FolderPlus',
+          title: formatKeyLabel(key),
+          defaultItems: [],
+          onDeleteCategory: () => handleDeleteCategory(key, key, formatKeyLabel(key))
+        }))}
 
-            return renderCategorySection(categoryKey, 'FolderPlus', categoryData?.name || categoryKey, items);
-          })
-        }
+        {customCategoryEntries?.map(([categoryKey, categoryData]) => renderCategorySection({
+          categoryKey,
+          categoryPath: `customCategories.${categoryKey}`,
+          iconName: 'FolderPlus',
+          title: categoryData?.name || formatKeyLabel(categoryKey),
+          defaultItems: [],
+          onDeleteCategory: () => handleDeleteCategory(categoryKey, `customCategories.${categoryKey}`, categoryData?.name)
+        }))}
       </div>
     </ErrorBoundary>
   );

@@ -218,7 +218,6 @@ export const financialService = {
 
     const validated = {};
 
-    // Validate personnel structure
     if (costData?.personnel && typeof costData?.personnel === 'object') {
       validated.personnel = {
         employees: {
@@ -229,25 +228,23 @@ export const financialService = {
           types: this.validateObjectStructure(costData?.personnel?.contractors?.types) || {}
         }
       };
-    } else {
-      validated.personnel = {
-        employees: { roles: {} },
-        contractors: { enabled: false, types: {} }
-      };
     }
 
-    // Validate standard categories
-    ['operations', 'marketing', 'technology']?.forEach(category => {
-      if (costData?.[category] && typeof costData?.[category] === 'object') {
-        validated[category] = {
-          items: this.validateObjectStructure(costData?.[category]?.items) || {}
+    Object.entries(costData)?.forEach(([key, value]) => {
+      if (key === 'personnel' || key === 'customCategories') {
+        return;
+      }
+      if (!value || typeof value !== 'object') return;
+
+      if (value?.items && typeof value?.items === 'object') {
+        validated[key] = {
+          items: this.validateObjectStructure(value?.items) || {}
         };
       } else {
-        validated[category] = { items: {} };
+        validated[key] = JSON.parse(JSON.stringify(value));
       }
     });
 
-    // Validate custom categories
     if (costData?.customCategories && typeof costData?.customCategories === 'object') {
       validated.customCategories = {};
       Object.entries(costData?.customCategories)?.forEach(([key, category]) => {
@@ -255,7 +252,7 @@ export const financialService = {
           validated.customCategories[key] = {
             name: category?.name || key,
             type: category?.type || 'custom',
-            enabled: Boolean(category?.enabled),
+            enabled: category?.enabled ?? true,
             items: this.validateObjectStructure(category?.items) || {}
           };
         }
@@ -286,13 +283,6 @@ export const financialService = {
   // ADDED: Get default cost structure
   getDefaultCostStructure() {
     return {
-      personnel: {
-        employees: { roles: {} },
-        contractors: { enabled: false, types: {} }
-      },
-      operations: { items: {} },
-      marketing: { items: {} },
-      technology: { items: {} },
       customCategories: {}
     };
   },
@@ -304,23 +294,41 @@ export const financialService = {
 
     // Merge personnel data
     if (tableData?.personnel?.employees?.roles) {
+      merged.personnel = merged.personnel || {
+        employees: { roles: {} },
+        contractors: { enabled: false, types: {} }
+      };
       Object.assign(merged?.personnel?.employees?.roles, tableData?.personnel?.employees?.roles);
     }
     if (tableData?.personnel?.contractors?.types) {
+      merged.personnel = merged.personnel || {
+        employees: { roles: {} },
+        contractors: { enabled: false, types: {} }
+      };
       Object.assign(merged?.personnel?.contractors?.types, tableData?.personnel?.contractors?.types);
       merged.personnel.contractors.enabled = tableData?.personnel?.contractors?.enabled;
     }
 
-    // Merge standard category items
-    ['operations', 'marketing', 'technology']?.forEach(category => {
-      if (tableData?.[category]?.items) {
-        Object.assign(merged?.[category]?.items, tableData?.[category]?.items);
+    Object.entries(tableData || {})?.forEach(([key, value]) => {
+      if (key === 'personnel' || key === 'customCategories') return;
+      if (!value || typeof value !== 'object') return;
+      if (value?.items) {
+        if (!merged?.[key] || typeof merged?.[key] !== 'object') {
+          merged[key] = { items: {} };
+        }
+        merged[key].items = merged[key].items || {};
+        Object.assign(merged[key].items, value?.items);
+      } else {
+        merged[key] = value;
       }
     });
 
     // Merge custom categories
     if (tableData?.customCategories) {
+      merged.customCategories = merged.customCategories || {};
       Object.assign(merged?.customCategories, tableData?.customCategories);
+    } else if (!merged?.customCategories) {
+      merged.customCategories = {};
     }
 
     return merged;

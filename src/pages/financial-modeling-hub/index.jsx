@@ -13,34 +13,98 @@ import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 import { generateFinancialAnalysis } from '../../services/aiAnalysisService';
 
+const personnelItems = [
+  { value: 'employees.roles.ceo', label: 'CEO', defaultValue: 25000, minValue: 0, maxValue: 100000, step: 1000 },
+  { value: 'employees.roles.cto', label: 'CTO', defaultValue: 20000, minValue: 0, maxValue: 80000, step: 1000 },
+  { value: 'employees.roles.senior-dev', label: 'Senior Developer', defaultValue: 12000, minValue: 0, maxValue: 30000, step: 500 },
+  { value: 'employees.roles.mid-dev', label: 'Mid-level Developer', defaultValue: 8000, minValue: 0, maxValue: 18000, step: 500 },
+  { value: 'employees.roles.junior-dev', label: 'Junior Developer', defaultValue: 5000, minValue: 0, maxValue: 12000, step: 250 },
+  { value: 'employees.roles.designer', label: 'UI/UX Designer', defaultValue: 7000, minValue: 0, maxValue: 15000, step: 500 },
+  { value: 'employees.roles.product-manager', label: 'Product Manager', defaultValue: 11000, minValue: 0, maxValue: 25000, step: 500 },
+  { value: 'employees.roles.qa-engineer', label: 'QA Engineer', defaultValue: 6000, minValue: 0, maxValue: 16000, step: 250 }
+];
+
+const operationsItems = [
+  { value: 'items.rent', label: 'Office Rent', defaultValue: 8000, minValue: 0, maxValue: 25000, step: 500 },
+  { value: 'items.utilities', label: 'Utilities', defaultValue: 1200, minValue: 0, maxValue: 5000, step: 100 },
+  { value: 'items.insurance', label: 'Insurance', defaultValue: 800, minValue: 0, maxValue: 3000, step: 100 },
+  { value: 'items.cleaning', label: 'Cleaning Services', defaultValue: 600, minValue: 0, maxValue: 2000, step: 100 },
+  { value: 'items.security', label: 'Security', defaultValue: 1000, minValue: 0, maxValue: 3000, step: 100 },
+  { value: 'items.maintenance', label: 'Maintenance', defaultValue: 800, minValue: 0, maxValue: 2500, step: 100 }
+];
+
+const marketingItems = [
+  { value: 'items.digital-ads', label: 'Digital Advertising', defaultValue: 15000, minValue: 0, maxValue: 100000, step: 1000 },
+  { value: 'items.content', label: 'Content Marketing', defaultValue: 5000, minValue: 0, maxValue: 25000, step: 500 },
+  { value: 'items.seo', label: 'SEO Services', defaultValue: 3000, minValue: 0, maxValue: 15000, step: 500 },
+  { value: 'items.social-media', label: 'Social Media Management', defaultValue: 2500, minValue: 0, maxValue: 10000, step: 250 },
+  { value: 'items.events', label: 'Events & Conferences', defaultValue: 8000, minValue: 0, maxValue: 50000, step: 1000 },
+  { value: 'items.pr', label: 'Public Relations', defaultValue: 4000, minValue: 0, maxValue: 15000, step: 500 }
+];
+
+const technologyItems = [
+  { value: 'items.software', label: 'Software Licenses', defaultValue: 2500, minValue: 0, maxValue: 15000, step: 250 },
+  { value: 'items.infrastructure', label: 'Cloud Infrastructure', defaultValue: 3500, minValue: 0, maxValue: 20000, step: 500 },
+  { value: 'items.tools', label: 'Development Tools', defaultValue: 1500, minValue: 0, maxValue: 8000, step: 200 },
+  { value: 'items.security', label: 'Security Tools', defaultValue: 1200, minValue: 0, maxValue: 5000, step: 200 },
+  { value: 'items.analytics', label: 'Analytics & Monitoring', defaultValue: 800, minValue: 0, maxValue: 3000, step: 100 },
+  { value: 'items.backup', label: 'Backup & Recovery', defaultValue: 600, minValue: 0, maxValue: 2000, step: 100 }
+];
+
+export const STANDARD_CATEGORY_CONFIGS = {
+  personnel: {
+    key: 'personnel',
+    label: 'Personnel',
+    title: 'Personnel Costs',
+    description: 'Team salaries, roles, and contractors',
+    iconName: 'Users',
+    defaultItems: personnelItems,
+    createInitialData: () => ({
+      employees: { roles: {} },
+      contractors: { enabled: false, types: {} }
+    })
+  },
+  operations: {
+    key: 'operations',
+    label: 'Operations',
+    title: 'Operations & Facilities',
+    description: 'Office, facilities, and operational expenses',
+    iconName: 'Building',
+    defaultItems: operationsItems,
+    createInitialData: () => ({ items: {} })
+  },
+  marketing: {
+    key: 'marketing',
+    label: 'Marketing',
+    title: 'Marketing & Sales',
+    description: 'Acquisition, content, and growth programs',
+    iconName: 'Megaphone',
+    defaultItems: marketingItems,
+    createInitialData: () => ({ items: {} })
+  },
+  technology: {
+    key: 'technology',
+    label: 'Technology',
+    title: 'Technology & Infrastructure',
+    description: 'Software, infrastructure, and tooling',
+    iconName: 'Server',
+    defaultItems: technologyItems,
+    createInitialData: () => ({ items: {} })
+  }
+};
+
+const createDefaultCostStructure = () => ({
+  customCategories: {}
+});
+
 const FinancialModelingHub = () => {
   const { user, isAuthenticated, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // FIXED: Initialize with proper nested structure and defensive object creation
-  const [costs, setCosts] = useState({
-    personnel: {
-      employees: {
-        roles: {}
-      },
-      contractors: {
-        enabled: false,
-        types: {}
-      }
-    },
-    operations: {
-      items: {}
-    },
-    marketing: {
-      items: {}
-    },
-    technology: {
-      items: {}
-    },
-    customCategories: {}
-  });
+  // Initialize with empty structure; user activates categories explicitly
+  const [costs, setCosts] = useState(() => createDefaultCostStructure());
 
   const [pricingScenarios] = useState([
     { id: 'basic', name: 'Basic', price: 29, breakeven: 245 },
@@ -130,20 +194,44 @@ const FinancialModelingHub = () => {
     },
 
     // ADDED: Remove item functionality
-    removeItem: (categoryKey, itemKey) => {
+    removeItem: (categoryKey, fieldPath) => {
       setCosts(prev => {
         const newCosts = JSON.parse(JSON.stringify(prev));
-        
-        if (categoryKey === 'personnel') {
-          if (newCosts?.personnel?.employees?.roles?.[itemKey]) {
-            delete newCosts?.personnel?.employees?.roles?.[itemKey];
+        const rootCategory = categoryKey?.split('.')?.[0];
+        const normalizeFullPath = () => {
+          if (!categoryKey) return '';
+          if (!fieldPath) return categoryKey;
+          if (fieldPath?.includes('.')) {
+            return [categoryKey, fieldPath].filter(Boolean).join('.');
           }
-        } else if (['operations', 'marketing', 'technology']?.includes(categoryKey)) {
-          if (newCosts?.[categoryKey]?.items?.[itemKey]) {
-            delete newCosts?.[categoryKey]?.items?.[itemKey];
+          if (rootCategory === 'personnel') {
+            return `${categoryKey}.employees.roles.${fieldPath}`;
           }
-        } else if (newCosts?.customCategories?.[categoryKey]?.items?.[itemKey]) {
-          delete newCosts?.customCategories?.[categoryKey]?.items?.[itemKey];
+          return `${categoryKey}.items.${fieldPath}`;
+        };
+
+        const deleteByPath = (path) => {
+          if (!path) return;
+          const keys = path?.split('.');
+          let current = newCosts;
+          for (let i = 0; i < keys?.length - 1; i++) {
+            const key = keys[i];
+            if (!current?.[key] || typeof current?.[key] !== 'object') {
+              return;
+            }
+            current = current?.[key];
+          }
+          const finalKey = keys?.[keys?.length - 1];
+          if (current && typeof current === 'object') {
+            delete current?.[finalKey];
+          }
+        };
+
+        const fullPath = normalizeFullPath();
+        deleteByPath(fullPath);
+
+        if (fullPath && rootCategory !== 'personnel') {
+          deleteByPath(`${fullPath}_quantity`);
         }
         
         return newCosts;
@@ -172,6 +260,55 @@ const FinancialModelingHub = () => {
       });
     }
   };
+
+  const handleAddStandardCategory = useCallback((categoryKey) => {
+    const template = STANDARD_CATEGORY_CONFIGS?.[categoryKey];
+    if (!template) return;
+    
+    setCosts(prev => {
+      const base = prev && typeof prev === 'object' ? prev : {};
+      if (base?.[categoryKey]) return base;
+      const newCosts = JSON.parse(JSON.stringify(base));
+      newCosts[categoryKey] = template?.createInitialData ? template.createInitialData() : { items: {} };
+      if (!newCosts?.customCategories || typeof newCosts?.customCategories !== 'object') {
+        newCosts.customCategories = base?.customCategories || {};
+      }
+      return newCosts;
+    });
+  }, []);
+
+  const handleRemoveCategory = useCallback((categoryPath) => {
+    if (!categoryPath) return;
+    
+    setCosts(prev => {
+      const base = prev && typeof prev === 'object' ? prev : {};
+      const newCosts = JSON.parse(JSON.stringify(base));
+      const keys = categoryPath?.split('.');
+      if (!keys || keys?.length === 0) {
+        return prev;
+      }
+
+      let current = newCosts;
+      for (let i = 0; i < keys?.length - 1; i++) {
+        const key = keys[i];
+        if (!current?.[key] || typeof current?.[key] !== 'object') {
+          return prev;
+        }
+        current = current?.[key];
+      }
+
+      const finalKey = keys?.[keys?.length - 1];
+      if (current && typeof current === 'object') {
+        delete current[finalKey];
+      }
+
+      if (!newCosts?.customCategories || typeof newCosts?.customCategories !== 'object') {
+        newCosts.customCategories = {};
+      }
+
+      return newCosts;
+    });
+  }, []);
 
   // ENHANCED: Cost calculation with proper structure handling
   const calculateTotalCosts = useCallback(() => {
@@ -386,102 +523,38 @@ const FinancialModelingHub = () => {
 
   // ADDED: Helper function to validate and structure cost data
   const validateAndStructureCostData = (rawCostData) => {
-    const defaultStructure = createDefaultCostStructure();
-    
     if (!rawCostData || typeof rawCostData !== 'object') {
-      return defaultStructure;
+      return createDefaultCostStructure();
     }
 
-    // Deep merge with validation
-    const structuredData = { ...defaultStructure };
+    const structuredData = {};
     
-    Object.keys(rawCostData)?.forEach(categoryKey => {
-      const categoryData = rawCostData?.[categoryKey];
+    Object.entries(rawCostData)?.forEach(([categoryKey, categoryData]) => {
+      if (!categoryData || typeof categoryData !== 'object') return;
       
-      if (categoryData && typeof categoryData === 'object') {
-        // Ensure proper structure for each category
-        if (categoryKey === 'personnel') {
-          structuredData.personnel = {
-            employees: {
-              roles: { ...(categoryData?.employees?.roles || {}) }
-            },
-            contractors: {
-              enabled: Boolean(categoryData?.contractors?.enabled),
-              types: { ...(categoryData?.contractors?.types || {}) }
-            }
-          };
-        } else if (['operations', 'marketing', 'technology']?.includes(categoryKey)) {
-          structuredData[categoryKey] = {
-            items: { ...(categoryData?.items || {}) }
-          };
-        } else if (categoryKey === 'customCategories') {
-          structuredData.customCategories = { ...categoryData };
-        }
+      if (categoryKey === 'customCategories') {
+        structuredData.customCategories = {};
+        Object.entries(categoryData)?.forEach(([customKey, customValue]) => {
+          if (customValue && typeof customValue === 'object') {
+            structuredData.customCategories[customKey] = {
+              name: customValue?.name || customKey,
+              type: customValue?.type || 'custom',
+              enabled: customValue?.enabled ?? true,
+              items: { ...(customValue?.items || {}) }
+            };
+          }
+        });
+      } else {
+        structuredData[categoryKey] = JSON.parse(JSON.stringify(categoryData));
       }
     });
 
+    if (!structuredData?.customCategories) {
+      structuredData.customCategories = {};
+    }
+
     return structuredData;
   };
-
-  // ADDED: Helper to create default cost structure
-  const createDefaultCostStructure = () => ({
-    personnel: {
-      employees: {
-        roles: {
-          developer: {
-            name: 'Developer',
-            value: 8000,
-            minValue: 0,
-            maxValue: 15000,
-            step: 500,
-            enabled: true,
-            count: 2
-          }
-        }
-      },
-      contractors: {
-        enabled: false,
-        types: {}
-      }
-    },
-    operations: {
-      items: {
-        rent: {
-          name: 'Office Rent',
-          value: 5000,
-          minValue: 0,
-          maxValue: 15000,
-          step: 500,
-          enabled: true
-        }
-      }
-    },
-    marketing: {
-      items: {
-        digital: {
-          name: 'Digital Advertising',
-          value: 10000,
-          minValue: 0,
-          maxValue: 50000,
-          step: 1000,
-          enabled: true
-        }
-      }
-    },
-    technology: {
-      items: {
-        software: {
-          name: 'Software Licenses',
-          value: 2000,
-          minValue: 0,
-          maxValue: 10000,
-          step: 250,
-          enabled: true
-        }
-      }
-    },
-    customCategories: {}
-  });
 
   useEffect(() => {
     if (user) {
@@ -686,22 +759,18 @@ const FinancialModelingHub = () => {
 
   // FIXED: Enhanced cost change handler with proper object structure validation
   const handleCostChange = (category, field, value) => {
+    const fullPath = [category, field]?.filter(Boolean)?.join('.');
+    if (!fullPath) return;
+    
     setCosts(prev => {
       // Deep clone to avoid mutation issues
       const newCosts = JSON.parse(JSON.stringify(prev));
-      
-      // Ensure category exists as object
-      if (!newCosts?.[category] || typeof newCosts?.[category] !== 'object') {
-        newCosts[category] = { items: {} };
-      }
-
-      const keys = field?.split('.');
-      let current = newCosts?.[category];
+      const keys = fullPath?.split('.');
+      let current = newCosts;
       
       // Navigate through nested structure, creating objects as needed
       for (let i = 0; i < keys?.length - 1; i++) {
         const key = keys?.[i];
-        
         // CRITICAL FIX: Ensure each level is an object, not boolean
         if (!current?.[key] || typeof current?.[key] !== 'object' || Array.isArray(current?.[key])) {
           current[key] = {};
@@ -1106,6 +1175,9 @@ const FinancialModelingHub = () => {
               onToggleCategory={handleToggleCategory}
               onRemoveItem={quickActionOperations?.removeItem}
               onAddCategory={quickActionOperations?.addCategory}
+              onAddStandardCategory={handleAddStandardCategory}
+              onRemoveCategory={handleRemoveCategory}
+              standardCategories={STANDARD_CATEGORY_CONFIGS}
               openDropdown={handleOpenDropdown}
               closeAllDropdowns={closeAllDropdowns}
               currentOpenDropdown={openDropdown}
