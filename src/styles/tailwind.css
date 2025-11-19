@@ -1,0 +1,281 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Base border radius for consistent UI elements */
+    --radius: 0.5rem;
+    
+    /* Light mode colors (default) */
+    --color-background: #FFFFFF;
+    --color-foreground: #0F172A;
+    --color-border: #E2E8F0;
+    --color-input: #FFFFFF;
+    --color-ring: #3B82F6;
+    
+    /* Card Colors */
+    --color-card: #FFFFFF;
+    --color-card-foreground: #0F172A;
+    
+    /* Popover Colors */
+    --color-popover: #FFFFFF;
+    --color-popover-foreground: #0F172A;
+    
+    /* Muted Colors */
+    --color-muted: #F1F5F9;
+    --color-muted-foreground: #64748B;
+    
+    /* Primary Colors */
+    --color-primary: #1E40AF;
+    --color-primary-foreground: #FFFFFF;
+    
+    /* Secondary Colors */
+    --color-secondary: #3B82F6;
+    --color-secondary-foreground: #FFFFFF;
+    
+    /* Destructive Colors */
+    --color-destructive: #DC2626;
+    --color-destructive-foreground: #FFFFFF;
+    
+    /* Accent Colors */
+    --color-accent: #059669;
+    --color-accent-foreground: #FFFFFF;
+    
+    /* Success Colors */
+    --color-success: #16A34A;
+    --color-success-foreground: #FFFFFF;
+    
+    /* Warning Colors */
+    --color-warning: #EA580C;
+    --color-warning-foreground: #FFFFFF;
+    
+    /* Error Colors */
+    --color-error: #DC2626;
+    --color-error-foreground: #FFFFFF;
+  }
+
+  .dark {
+    /* Dark mode colors */
+    --color-background: #0F172A;
+    --color-foreground: #F1F5F9;
+    --color-border: #334155;
+    --color-input: #1E293B;
+    --color-ring: #60A5FA;
+    
+    /* Card Colors */
+    --color-card: #1E293B;
+    --color-card-foreground: #F1F5F9;
+    
+    /* Popover Colors */
+    --color-popover: #1E293B;
+    --color-popover-foreground: #F1F5F9;
+    
+    /* Muted Colors */
+    --color-muted: #334155;
+    --color-muted-foreground: #94A3B8;
+    
+    /* Primary Colors */
+    --color-primary: #60A5FA;
+    --color-primary-foreground: #0F172A;
+    
+    /* Secondary Colors */
+    --color-secondary: #3B82F6;
+    --color-secondary-foreground: #FFFFFF;
+    
+    /* Destructive Colors */
+    --color-destructive: #EF4444;
+    --color-destructive-foreground: #FFFFFF;
+    
+    /* Accent Colors */
+    --color-accent: #10B981;
+    --color-accent-foreground: #FFFFFF;
+    
+    /* Success Colors */
+    --color-success: #22C55E;
+    --color-success-foreground: #FFFFFF;
+    
+    /* Warning Colors */
+    --color-warning: #F59E0B;
+    --color-warning-foreground: #000000;
+    
+    /* Error Colors */
+    --color-error: #EF4444;
+    --color-error-foreground: #FFFFFF;
+  }
+
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Enhanced theme transitions */
+  html {
+    transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Smooth theme transitions for all themed elements */
+  .theme-transition,
+  [class*="bg-"],
+  [class*="text-"],
+  [class*="border-"] {
+    transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+                color 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+                border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+@layer utilities {
+  .font-data {
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Enhanced contrast utilities for charts and interactive elements */
+  .chart-high-contrast .recharts-cartesian-grid line {
+    @apply stroke-border opacity-60;
+  }
+  
+  .chart-high-contrast .recharts-text {
+    @apply fill-foreground;
+  }
+  
+  .chart-high-contrast .recharts-tooltip-wrapper {
+    @apply shadow-2xl;
+  }
+
+  .chart-high-contrast .recharts-active-dot {
+    @apply fill-primary stroke-primary;
+  }
+
+  .chart-high-contrast .recharts-dot {
+    @apply fill-primary;
+  }
+
+  /* Slider and range input styling for better visibility */
+  input[type="range"] {
+    @apply appearance-none bg-muted rounded-lg h-2 outline-none transition-all duration-200;
+  }
+input[type="range"]:hover  {
+    
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    @apply appearance-none w-5 h-5 bg-primary rounded-full cursor-pointer shadow-lg transition-all duration-200;
+  }
+
+  input[type="range"]::-webkit-slider-thumb:hover {
+    @apply scale-110 shadow-xl;
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    @apply w-5 h-5 bg-primary rounded-full cursor-pointer shadow-lg border-0 transition-all duration-200;
+  }
+
+  input[type="range"]::-moz-range-thumb:hover {
+    @apply scale-110 shadow-xl;
+  }
+
+  /* Select dropdown styling for better contrast */
+  select {
+    @apply bg-background text-foreground border-border transition-colors duration-200;
+  }
+
+  select:focus {
+    @apply ring-2 ring-primary ring-opacity-50 border-primary;
+  }
+select:hover  {
+    
+  }
+
+  /* Button hover states with higher contrast */
+  .btn-primary:hover {
+    @apply transform scale-105 transition-all duration-200;
+  }
+  
+  .btn-secondary:hover {
+    @apply transform scale-105 transition-all duration-200;
+  }
+
+  /* Enhanced focus states for better accessibility */
+  .focus-visible:focus-visible {
+    @apply outline-2 outline-primary outline-offset-2;
+  }
+
+  /* Improved scrollbar styling for dark/light themes */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Custom scrollbar with theme support */
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    @apply bg-muted;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+.scrollbar-thin::-webkit-scrollbar-thumb:hover  {
+    
+  }
+
+  /* Theme-aware loading states */
+  .loading-shimmer {
+    background: linear-gradient(
+      90deg,
+      theme('colors.muted') 0%,
+      theme('colors.muted.foreground') 20%,
+      theme('colors.muted') 40%,
+      theme('colors.muted') 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  /* Enhanced theme transition animations */
+  .theme-transition {
+    @apply transition-colors duration-300 ease-in-out;
+  }
+
+  /* Fix for form elements in different themes */
+  input[type="text"], 
+  input[type="email"], 
+  input[type="password"], 
+  input[type="number"], 
+  textarea {
+    @apply bg-background text-foreground border-border transition-colors duration-200;
+  }
+
+  input[type="text"]:focus, 
+  input[type="email"]:focus, 
+  input[type="password"]:focus, 
+  input[type="number"]:focus, 
+  textarea:focus {
+    @apply ring-2 ring-primary ring-opacity-50 border-primary;
+  }
+}
