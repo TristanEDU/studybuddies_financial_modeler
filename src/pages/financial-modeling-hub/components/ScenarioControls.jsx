@@ -9,9 +9,11 @@ const ScenarioControls = ({
   activeScenario, 
   onScenarioChange, 
   onSaveScenario, 
-  onLoadScenario, 
+  onLoadScenario,
+  onDeleteScenario,
   onExportData,
-  onImportData 
+  onImportData,
+  onOpenImportDialog
 }) => {
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [newScenarioName, setNewScenarioName] = useState('');
@@ -191,28 +193,19 @@ const ScenarioControls = ({
           <div className="space-y-3">
             <label className="text-sm font-medium text-foreground">Import Data</label>
             <div className="flex items-center space-x-2">
-              <input
-                type="file"
-                accept=".json,.csv"
-                onChange={handleFileUpload}
-                className="hidden"
-                id="file-upload"
-              />
-              <label
-                htmlFor="file-upload"
-                className="flex-1 px-3 py-2 border border-border rounded-md text-sm text-muted-foreground hover:bg-muted cursor-pointer transition-colors"
-              >
-                Choose file...
-              </label>
               <Button
                 variant="outline"
-                onClick={() => document.getElementById('file-upload')?.click()}
+                fullWidth
+                onClick={onOpenImportDialog}
                 iconName="Upload"
                 iconSize={16}
               >
-                Import
+                Import CSV/JSON
               </Button>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Import cost data from CSV or JSON files with field mapping support
+            </p>
           </div>
         </div>
       </div>
@@ -245,7 +238,7 @@ const ScenarioControls = ({
                   size="icon"
                   onClick={(e) => {
                     e?.stopPropagation();
-                    // Handle delete scenario
+                    onDeleteScenario?.(scenario?.id);
                   }}
                 >
                   <Icon name="Trash2" size={14} className="text-destructive" />

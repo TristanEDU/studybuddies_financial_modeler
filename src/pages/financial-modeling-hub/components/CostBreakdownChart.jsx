@@ -5,7 +5,6 @@ import Button from '../../../components/ui/Button';
 
 const CostBreakdownChart = ({ costData, monthlyProjections }) => {
   const [viewMode, setViewMode] = useState('pie'); // 'pie' or 'bar'
-  const [timeframe, setTimeframe] = useState('current'); // 'current' or 'projected'
 
   const COLORS = [
     'var(--color-primary)',
@@ -28,10 +27,12 @@ const CostBreakdownChart = ({ costData, monthlyProjections }) => {
   };
 
   const calculatePercentage = (value, total) => {
+    // Guard against zero division
+    if (!total || total === 0) return '0.0';
     return ((value / total) * 100)?.toFixed(1);
   };
 
-  const totalCosts = costData?.reduce((sum, item) => sum + item?.value, 0);
+  const totalCosts = costData?.reduce((sum, item) => sum + item?.value, 0) || 0;
 
   const CustomTooltip = ({ active, payload }) => {
     if (active && payload && payload?.length) {

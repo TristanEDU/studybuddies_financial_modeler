@@ -102,7 +102,12 @@ const ComparisonMetrics = ({ scenarios, comparisonMode }) => {
               return (
                 <div key={scenario} className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
-                    <div className={`w-3 h-3 rounded-full bg-${['blue', 'green', 'orange', 'red']?.[index]}-500`}></div>
+                    <div className={`w-3 h-3 rounded-full ${
+                      index === 0 ? 'bg-blue-500' :
+                      index === 1 ? 'bg-green-500' :
+                      index === 2 ? 'bg-orange-500' :
+                      'bg-red-500'
+                    }`}></div>
                     <span className="text-xs text-muted-foreground">
                       Scenario {index + 1}
                     </span>

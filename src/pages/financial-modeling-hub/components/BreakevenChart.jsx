@@ -2,7 +2,7 @@ import React from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 import Icon from '../../../components/AppIcon';
 
-const BreakevenChart = ({ data, breakeven, pricingScenarios, activePricing, onPricingChange }) => {
+const BreakevenChart = ({ data, breakeven, pricingScenarios, activePricing, onPricingChange, onEditPricingTiers }) => {
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -167,7 +167,18 @@ const BreakevenChart = ({ data, breakeven, pricingScenarios, activePricing, onPr
       </div>
       {/* Enhanced Pricing Scenarios with working onClick handlers (Fix for bug #7) */}
       <div className="mt-6 pt-6 border-t border-border">
-        <h4 className="text-sm font-medium text-foreground mb-3">Pricing Scenarios</h4>
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-sm font-medium text-foreground">Pricing Scenarios</h4>
+          {onEditPricingTiers && (
+            <button
+              onClick={onEditPricingTiers}
+              className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
+            >
+              <Icon name="Edit2" size={14} />
+              Edit Tiers
+            </button>
+          )}
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           {pricingScenarios?.map((scenario) => (
             <div
@@ -188,8 +199,17 @@ const BreakevenChart = ({ data, breakeven, pricingScenarios, activePricing, onPr
                 )}
               </div>
               <div className="text-lg font-bold text-primary mb-1">
-                {formatCurrency(scenario?.price)}/mo
+                {formatCurrency(scenario?.price)}
+                {scenario?.billingPeriod === 'monthly' && '/mo'}
+                {scenario?.billingPeriod === 'annual' && '/yr'}
+                {scenario?.billingPeriod === 'lifetime' && ' lifetime'}
               </div>
+              {scenario?.billingPeriod && scenario.billingPeriod !== 'monthly' && (
+                <div className="text-xs text-muted-foreground mb-1">
+                  {scenario.billingPeriod === 'annual' && `${formatCurrency(scenario.price / 12)}/mo equiv`}
+                  {scenario.billingPeriod === 'lifetime' && `${formatCurrency(scenario.price / 60)}/mo (5yr)`}
+                </div>
+              )}
               <div className="text-xs text-muted-foreground">
                 Breakeven: {scenario?.breakeven} members
               </div>

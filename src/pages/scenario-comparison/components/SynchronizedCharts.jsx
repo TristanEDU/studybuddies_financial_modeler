@@ -77,14 +77,38 @@ const SynchronizedCharts = ({ scenarios, timeHorizon }) => {
   };
 
   const renderChart = () => {
-    const chartData = activeScenarios?.length > 0 
-      ? generateMockData(activeScenarios?.[0], timeHorizon)
-      : [];
+    // Generate data for ALL active scenarios and merge them
+    const mergedData = [];
+    
+    if (activeScenarios?.length > 0) {
+      const maxMonths = parseInt(timeHorizon);
+      
+      for (let i = 0; i < maxMonths; i++) {
+        const monthData = { month: `M${i + 1}` };
+        
+        activeScenarios.forEach((scenario, scenarioIndex) => {
+          const scenarioData = generateMockData(scenario, timeHorizon);
+          const monthInfo = scenarioData[i];
+          
+          if (monthInfo) {
+            // Add data for each scenario with unique keys
+            monthData[`revenue_${scenarioIndex}`] = monthInfo.revenue;
+            monthData[`costs_${scenarioIndex}`] = monthInfo.costs;
+            monthData[`profit_${scenarioIndex}`] = monthInfo.profit;
+            monthData[`cumRevenue_${scenarioIndex}`] = monthInfo.cumRevenue;
+            monthData[`cumCosts_${scenarioIndex}`] = monthInfo.cumCosts;
+            monthData[`cumProfit_${scenarioIndex}`] = monthInfo.cumProfit;
+          }
+        });
+        
+        mergedData.push(monthData);
+      }
+    }
 
     if (activeChart === 'cumulative') {
       return (
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+          <BarChart data={mergedData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
             <XAxis dataKey="month" tick={{ fontSize: 12 }} />
             <YAxis tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000)?.toFixed(0)}K`} />
@@ -92,7 +116,7 @@ const SynchronizedCharts = ({ scenarios, timeHorizon }) => {
             {activeScenarios?.map((scenario, index) => (
               <Bar
                 key={scenario}
-                dataKey="cumRevenue"
+                dataKey={`cumRevenue_${index}`}
                 fill={scenarioColors?.[scenario]}
                 name={`Scenario ${index + 1}`}
                 radius={[4, 4, 0, 0]}
@@ -105,7 +129,7 @@ const SynchronizedCharts = ({ scenarios, timeHorizon }) => {
 
     return (
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+        <LineChart data={mergedData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
           <XAxis dataKey="month" tick={{ fontSize: 12 }} />
           <YAxis tick={{ fontSize: 12 }} tickFormatter={(value) => `$${(value / 1000)?.toFixed(0)}K`} />
@@ -114,7 +138,7 @@ const SynchronizedCharts = ({ scenarios, timeHorizon }) => {
             <Line
               key={scenario}
               type="monotone"
-              dataKey={activeChart}
+              dataKey={`${activeChart}_${index}`}
               stroke={scenarioColors?.[scenario]}
               strokeWidth={3}
               dot={{ r: 4 }}

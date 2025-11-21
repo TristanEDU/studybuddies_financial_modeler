@@ -80,7 +80,6 @@ const ErrorBoundary = ({ children, fallback }) => {
 const CostInputPanel = ({ 
   costs, 
   onCostChange, 
-  onToggleCategory, 
   onRemoveItem,
   onAddCategory,
   onAddStandardCategory,
@@ -262,13 +261,10 @@ const CostInputPanel = ({
           [category]: value
         }
       }));
-      if (onToggleCategory) {
-        onToggleCategory(category, value);
-      }
     } catch (error) {
       console.error('Category toggle error:', error);
     }
-  }, [onToggleCategory]);
+  }, []);
 
   const toggleCustomCategoryModal = useCallback(() => {
     setState(prev => ({
@@ -314,7 +310,8 @@ const CostInputPanel = ({
       if (customAmountTarget && customAmount !== '') {
         const amount = parseFloat(customAmount);
         if (ValidationUtils?.validateCostValue(amount) || amount === 0) {
-          handleSliderChange(customAmountTarget?.category, customAmountTarget?.field, amount);
+          // FIX: Always append .value to update the value property of the item object
+          handleSliderChange(customAmountTarget?.category, `${customAmountTarget?.field}.value`, amount);
           setState(prev => ({
             ...prev,
             showCustomAmountModal: false,
@@ -350,8 +347,15 @@ const CostInputPanel = ({
       if (!field) return 0;
       const categoryData = getCategoryData(category);
       if (!categoryData || typeof categoryData !== 'object') return 0;
-      const value = resolvePath(categoryData, field);
-      return typeof value === 'number' ? value : Number(value) || 0;
+      const resolved = resolvePath(categoryData, field);
+      
+      // If the resolved value is an object (like a role), get its 'value' property
+      if (resolved && typeof resolved === 'object' && 'value' in resolved) {
+        return typeof resolved.value === 'number' ? resolved.value : Number(resolved.value) || 0;
+      }
+      
+      // Otherwise treat it as a direct value
+      return typeof resolved === 'number' ? resolved : Number(resolved) || 0;
     } catch (error) {
       console.error('Error getting cost value:', error);
       return 0;
@@ -488,7 +492,9 @@ const CostInputPanel = ({
             value={currentValue}
             onChange={(e) => {
               const newValue = parseFloat(e?.target?.value) || 0;
-              handleSliderChange(category, field, newValue);
+              // FIX: Always append .value to update the value property of the item object
+              const fieldPath = `${field}.value`;
+              handleSliderChange(category, fieldPath, newValue);
             }}
             className={`flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer slider ${
               hasError ? 'border-destructive' : ''

@@ -1,346 +1,416 @@
-import { supabase } from '../lib/supabase';
-import { costService } from './costService';
+import { supabase } from "../lib/supabase";
+import { costService } from "./costService";
 
 export const financialService = {
-  // Create a new financial scenario
-  async createScenario(scenarioData) {
-    try {
-      const { data: { user } } = await supabase?.auth?.getUser();
-      if (!user) throw new Error('Not authenticated');
+	// Create a new financial scenario
+	async createScenario(scenarioData) {
+		try {
+			const {
+				data: { user },
+			} = await supabase?.auth?.getUser();
+			if (!user) throw new Error("Not authenticated");
 
-      // ENHANCED: Validate and structure cost data before saving
-      const validatedCostData = this.validateCostData(scenarioData?.costData);
+			// ENHANCED: Validate and structure cost data before saving
+			const validatedCostData = this.validateCostData(scenarioData?.costData);
 
-      const { data, error } = await supabase?.from('financial_scenarios')?.insert({
-        user_id: user?.id,
-        name: scenarioData?.name || 'Untitled Scenario',
-        description: scenarioData?.description || '',
-        cost_data: validatedCostData,
-        pricing_data: scenarioData?.pricingData || { activePricing: 'standard' },
-        status: 'active',
-        is_template: scenarioData?.isTemplate || false
-      })?.select()?.single();
+			const { data, error } = await supabase
+				?.from("financial_scenarios")
+				?.insert({
+					user_id: user?.id,
+					name: scenarioData?.name || "Untitled Scenario",
+					description: scenarioData?.description || "",
+					cost_data: validatedCostData,
+					pricing_data: scenarioData?.pricingData || {
+						activePricing: "standard",
+					},
+					status: "active",
+					is_template: scenarioData?.isTemplate || false,
+				})
+				?.select()
+				?.single();
 
-      if (error) throw error;
+			if (error) throw error;
 
-      // Save detailed cost structure to related tables
-      if (validatedCostData && Object.keys(validatedCostData)?.length > 0) {
-        try {
-          await costService?.saveCostCategories(data?.id, validatedCostData);
-        } catch (costError) {
-          console.error('Error saving cost categories:', costError);
-          // Don't fail the entire operation if cost details fail
-        }
-      }
+			// Save detailed cost structure to related tables
+			if (validatedCostData && Object.keys(validatedCostData)?.length > 0) {
+				try {
+					await costService?.saveCostCategories(data?.id, validatedCostData);
+				} catch (costError) {
+					console.error("Error saving cost categories:", costError);
+					// Don't fail the entire operation if cost details fail
+				}
+			}
 
-      return {
-        id: data?.id,
-        userId: data?.user_id,
-        name: data?.name,
-        description: data?.description,
-        costData: validatedCostData,
-        pricingData: data?.pricing_data,
-        status: data?.status,
-        isTemplate: data?.is_template,
-        createdAt: data?.created_at,
-        updatedAt: data?.updated_at
-      };
-    } catch (error) {
-      console.error('Error creating scenario:', error);
-      throw error;
-    }
-  },
+			return {
+				id: data?.id,
+				userId: data?.user_id,
+				name: data?.name,
+				description: data?.description,
+				costData: validatedCostData,
+				pricingData: data?.pricing_data,
+				status: data?.status,
+				isTemplate: data?.is_template,
+				createdAt: data?.created_at,
+				updatedAt: data?.updated_at,
+			};
+		} catch (error) {
+			console.error("Error creating scenario:", error);
+			throw error;
+		}
+	},
 
-  // Update an existing scenario
-  async updateScenario(scenarioId, updates) {
-    try {
-      const { data: { user } } = await supabase?.auth?.getUser();
-      if (!user) throw new Error('Not authenticated');
+	// Update an existing scenario
+	async updateScenario(scenarioId, updates) {
+		try {
+			const {
+				data: { user },
+			} = await supabase?.auth?.getUser();
+			if (!user) throw new Error("Not authenticated");
 
-      // ENHANCED: Validate cost data if provided
-      const updateData = { ...updates };
-      if (updateData?.costData) {
-        updateData.cost_data = this.validateCostData(updateData?.costData);
-        delete updateData?.costData;
-      }
+			// Build update object with only valid database columns
+			const updateData = {};
 
-      const { data, error } = await supabase?.from('financial_scenarios')
-        ?.update({
-          ...updateData,
-          updated_at: new Date()?.toISOString()
-        })
-        ?.eq('id', scenarioId)
-        ?.eq('user_id', user?.id)
-        ?.select()
-        ?.single();
+			// Convert and add allowed fields
+			if (updates?.name !== undefined) updateData.name = updates.name;
+			if (updates?.description !== undefined)
+				updateData.description = updates.description;
+			if (updates?.status !== undefined) updateData.status = updates.status;
+			if (updates?.isTemplate !== undefined)
+				updateData.is_template = updates.isTemplate;
 
-      if (error) throw error;
+			// Convert cost data
+			if (updates?.costData) {
+				updateData.cost_data = this.validateCostData(updates.costData);
+			}
 
-      // Update cost categories if cost data was provided
-      if (updates?.costData) {
-        try {
-          await costService?.saveCostCategories(scenarioId, updates?.costData);
-        } catch (costError) {
-          console.error('Error updating cost categories:', costError);
-        }
-      }
+			// Convert pricing data
+			if (updates?.pricingData) {
+				updateData.pricing_data = updates.pricingData;
+			}
 
-      return {
-        id: data?.id,
-        userId: data?.user_id,
-        name: data?.name,
-        description: data?.description,
-        costData: data?.cost_data,
-        pricingData: data?.pricing_data,
-        status: data?.status,
-        isTemplate: data?.is_template,
-        createdAt: data?.created_at,
-        updatedAt: data?.updated_at
-      };
-    } catch (error) {
-      console.error('Error updating scenario:', error);
-      throw error;
-    }
-  },
+			// Always update timestamp
+			updateData.updated_at = new Date().toISOString();
 
-  // Get all scenarios for the current user
-  async getScenarios() {
-    try {
-      const { data: { user } } = await supabase?.auth?.getUser();
-      if (!user) throw new Error('Not authenticated');
+			const { data, error } = await supabase
+				?.from("financial_scenarios")
+				?.update(updateData)
+				?.eq("id", scenarioId)
+				?.eq("user_id", user?.id)
+				?.select()
+				?.single();
+			if (error) throw error;
 
-      const { data, error } = await supabase?.from('financial_scenarios')
-        ?.select('*')
-        ?.eq('user_id', user?.id)
-        ?.order('updated_at', { ascending: false });
+			// Update cost categories if cost data was provided
+			if (updates?.costData) {
+				await costService?.saveCostCategories(scenarioId, updates?.costData);
+			}
+			return {
+				id: data?.id,
+				userId: data?.user_id,
+				name: data?.name,
+				description: data?.description,
+				costData: data?.cost_data,
+				pricingData: data?.pricing_data,
+				status: data?.status,
+				isTemplate: data?.is_template,
+				createdAt: data?.created_at,
+				updatedAt: data?.updated_at,
+			};
+		} catch (error) {
+			console.error("Error updating scenario:", error);
+			throw error;
+		}
+	},
 
-      if (error) throw error;
+	// Get all scenarios for the current user
+	async getScenarios() {
+		try {
+			const {
+				data: { user },
+			} = await supabase?.auth?.getUser();
+			if (!user) throw new Error("Not authenticated");
 
-      return data?.map(scenario => ({
-        id: scenario?.id,
-        userId: scenario?.user_id,
-        name: scenario?.name,
-        description: scenario?.description,
-        costData: scenario?.cost_data,
-        pricingData: scenario?.pricing_data,
-        status: scenario?.status,
-        isTemplate: scenario?.is_template,
-        createdAt: scenario?.created_at,
-        updatedAt: scenario?.updated_at
-      })) || [];
-    } catch (error) {
-      console.error('Error fetching scenarios:', error);
-      throw error;
-    }
-  },
+			const { data, error } = await supabase
+				?.from("financial_scenarios")
+				?.select("*")
+				?.eq("user_id", user?.id)
+				?.order("updated_at", { ascending: false });
 
-  // Get a scenario with detailed cost data from related tables
-  async getScenarioWithCostData(scenarioId) {
-    try {
-      const { data: { user } } = await supabase?.auth?.getUser();
-      if (!user) throw new Error('Not authenticated');
+			if (error) throw error;
 
-      const { data: scenario, error } = await supabase?.from('financial_scenarios')
-        ?.select('*')
-        ?.eq('id', scenarioId)
-        ?.eq('user_id', user?.id)
-        ?.single();
+			return (
+				data?.map((scenario) => ({
+					id: scenario?.id,
+					userId: scenario?.user_id,
+					name: scenario?.name,
+					description: scenario?.description,
+					costData: scenario?.cost_data,
+					pricingData: scenario?.pricing_data,
+					status: scenario?.status,
+					isTemplate: scenario?.is_template,
+					createdAt: scenario?.created_at,
+					updatedAt: scenario?.updated_at,
+				})) || []
+			);
+		} catch (error) {
+			console.error("Error fetching scenarios:", error);
+			throw error;
+		}
+	},
 
-      if (error) throw error;
+	// Get a scenario with detailed cost data from related tables
+	async getScenarioWithCostData(scenarioId) {
+		try {
+			const {
+				data: { user },
+			} = await supabase?.auth?.getUser();
+			if (!user) throw new Error("Not authenticated");
 
-      // Get detailed cost data from related tables
-      let detailedCostData = scenario?.cost_data || {};
-      
-      try {
-        const costDataFromTables = await costService?.getCostDataForScenario(scenarioId);
-        if (costDataFromTables && Object.keys(costDataFromTables)?.length > 0) {
-          // Merge with existing cost data, prioritizing table data
-          detailedCostData = this.mergeCostData(scenario?.cost_data, costDataFromTables);
-        }
-      } catch (costError) {
-        console.error('Error fetching detailed cost data:', costError);
-        // Use the cost_data from scenario table as fallback
-      }
+			const { data: scenario, error } = await supabase
+				?.from("financial_scenarios")
+				?.select("*")
+				?.eq("id", scenarioId)
+				?.eq("user_id", user?.id)
+				?.single();
 
-      // ENHANCED: Validate the final cost data structure
-      const validatedCostData = this.validateCostData(detailedCostData);
+			if (error) throw error;
 
-      return {
-        id: scenario?.id,
-        userId: scenario?.user_id,
-        name: scenario?.name,
-        description: scenario?.description,
-        costData: validatedCostData,
-        pricingData: scenario?.pricing_data,
-        status: scenario?.status,
-        isTemplate: scenario?.is_template,
-        createdAt: scenario?.created_at,
-        updatedAt: scenario?.updated_at
-      };
-    } catch (error) {
-      console.error('Error fetching scenario with cost data:', error);
-      throw error;
-    }
-  },
+			// Get detailed cost data from related tables
+			let detailedCostData = scenario?.cost_data || {};
 
-  // Delete a scenario
-  async deleteScenario(scenarioId) {
-    try {
-      const { data: { user } } = await supabase?.auth?.getUser();
-      if (!user) throw new Error('Not authenticated');
+			try {
+				const costDataFromTables = await costService?.getCostDataForScenario(
+					scenarioId
+				);
+				if (costDataFromTables && Object.keys(costDataFromTables)?.length > 0) {
+					// Merge with existing cost data, prioritizing table data
+					detailedCostData = this.mergeCostData(
+						scenario?.cost_data,
+						costDataFromTables
+					);
+				}
+			} catch (costError) {
+				console.error("Error fetching detailed cost data:", costError);
+				// Use the cost_data from scenario table as fallback
+			}
 
-      // Delete related cost items and categories first
-      await supabase?.from('cost_items')?.delete()?.in('category_id', 
-        supabase?.from('cost_categories')?.select('id')?.eq('scenario_id', scenarioId)?.eq('user_id', user?.id)
-      );
-      await supabase?.from('cost_categories')?.delete()?.eq('scenario_id', scenarioId)?.eq('user_id', user?.id);
+			// ENHANCED: Validate the final cost data structure
+			const validatedCostData = this.validateCostData(detailedCostData);
 
-      // Delete the scenario
-      const { error } = await supabase?.from('financial_scenarios')
-        ?.delete()
-        ?.eq('id', scenarioId)
-        ?.eq('user_id', user?.id);
+			return {
+				id: scenario?.id,
+				userId: scenario?.user_id,
+				name: scenario?.name,
+				description: scenario?.description,
+				costData: validatedCostData,
+				pricingData: scenario?.pricing_data,
+				status: scenario?.status,
+				isTemplate: scenario?.is_template,
+				createdAt: scenario?.created_at,
+				updatedAt: scenario?.updated_at,
+			};
+		} catch (error) {
+			console.error("Error fetching scenario with cost data:", error);
+			throw error;
+		}
+	},
 
-      if (error) throw error;
+	// Delete a scenario
+	async deleteScenario(scenarioId) {
+		try {
+			const {
+				data: { user },
+			} = await supabase?.auth?.getUser();
+			if (!user) throw new Error("Not authenticated");
 
-      return true;
-    } catch (error) {
-      console.error('Error deleting scenario:', error);
-      throw error;
-    }
-  },
+			// FIXED: Fetch category IDs first, then delete cost_items
+			const { data: existingCategories } = await supabase
+				.from("cost_categories")
+				.select("id")
+				.eq("scenario_id", scenarioId)
+				.eq("user_id", user.id);
 
-  // ADDED: Validate and structure cost data to prevent type errors
-  validateCostData(costData) {
-    if (!costData || typeof costData !== 'object') {
-      return this.getDefaultCostStructure();
-    }
+			if (existingCategories && existingCategories.length > 0) {
+				const categoryIds = existingCategories.map((cat) => cat.id);
+				await supabase
+					.from("cost_items")
+					.delete()
+					.in("category_id", categoryIds);
+			}
 
-    const validated = {};
+			await supabase
+				.from("cost_categories")
+				.delete()
+				.eq("scenario_id", scenarioId)
+				.eq("user_id", user.id);
 
-    if (costData?.personnel && typeof costData?.personnel === 'object') {
-      validated.personnel = {
-        employees: {
-          roles: this.validateObjectStructure(costData?.personnel?.employees?.roles) || {}
-        },
-        contractors: {
-          enabled: Boolean(costData?.personnel?.contractors?.enabled),
-          types: this.validateObjectStructure(costData?.personnel?.contractors?.types) || {}
-        }
-      };
-    }
+			// Delete the scenario
+			const { error } = await supabase
+				.from("financial_scenarios")
+				.delete()
+				.eq("id", scenarioId)
+				.eq("user_id", user.id);
 
-    Object.entries(costData)?.forEach(([key, value]) => {
-      if (key === 'personnel' || key === 'customCategories') {
-        return;
-      }
-      if (!value || typeof value !== 'object') return;
+			if (error) throw error;
 
-      if (value?.items && typeof value?.items === 'object') {
-        validated[key] = {
-          items: this.validateObjectStructure(value?.items) || {}
-        };
-      } else {
-        validated[key] = JSON.parse(JSON.stringify(value));
-      }
-    });
+			return true;
+		} catch (error) {
+			console.error("Error deleting scenario:", error);
+			throw error;
+		}
+	},
 
-    if (costData?.customCategories && typeof costData?.customCategories === 'object') {
-      validated.customCategories = {};
-      Object.entries(costData?.customCategories)?.forEach(([key, category]) => {
-        if (category && typeof category === 'object') {
-          validated.customCategories[key] = {
-            name: category?.name || key,
-            type: category?.type || 'custom',
-            enabled: category?.enabled ?? true,
-            items: this.validateObjectStructure(category?.items) || {}
-          };
-        }
-      });
-    } else {
-      validated.customCategories = {};
-    }
+	// ADDED: Validate and structure cost data to prevent type errors
+	validateCostData(costData) {
+		if (!costData || typeof costData !== "object") {
+			return this.getDefaultCostStructure();
+		}
 
-    return validated;
-  },
+		const validated = {};
 
-  // ADDED: Validate object structure to prevent type errors
-  validateObjectStructure(obj) {
-    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
-      return {};
-    }
+		if (costData?.personnel && typeof costData?.personnel === "object") {
+			validated.personnel = {
+				employees: {
+					roles:
+						this.validateObjectStructure(
+							costData?.personnel?.employees?.roles
+						) || {},
+				},
+				contractors: {
+					enabled: Boolean(costData?.personnel?.contractors?.enabled),
+					types:
+						this.validateObjectStructure(
+							costData?.personnel?.contractors?.types
+						) || {},
+				},
+			};
+		}
 
-    const validated = {};
-    Object.entries(obj)?.forEach(([key, value]) => {
-      if (value && typeof value === 'object' && !Array.isArray(value)) {
-        validated[key] = { ...value };
-      }
-    });
+		Object.entries(costData)?.forEach(([key, value]) => {
+			if (key === "personnel" || key === "customCategories") {
+				return;
+			}
+			if (!value || typeof value !== "object") return;
 
-    return validated;
-  },
+			if (value?.items && typeof value?.items === "object") {
+				validated[key] = {
+					items: this.validateObjectStructure(value?.items) || {},
+				};
+			} else {
+				validated[key] = JSON.parse(JSON.stringify(value));
+			}
+		});
 
-  // ADDED: Get default cost structure
-  getDefaultCostStructure() {
-    return {
-      customCategories: {}
-    };
-  },
+		if (
+			costData?.customCategories &&
+			typeof costData?.customCategories === "object"
+		) {
+			validated.customCategories = {};
+			Object.entries(costData?.customCategories)?.forEach(([key, category]) => {
+				if (category && typeof category === "object") {
+					validated.customCategories[key] = {
+						name: category?.name || key,
+						type: category?.type || "custom",
+						enabled: category?.enabled ?? true,
+						items: this.validateObjectStructure(category?.items) || {},
+					};
+				}
+			});
+		} else {
+			validated.customCategories = {};
+		}
 
-  // ADDED: Merge cost data structures safely
-  mergeCostData(scenarioCostData, tableCostData) {
-    const merged = this.validateCostData(scenarioCostData);
-    const tableData = this.validateCostData(tableCostData);
+		return validated;
+	},
 
-    // Merge personnel data
-    if (tableData?.personnel?.employees?.roles) {
-      merged.personnel = merged.personnel || {
-        employees: { roles: {} },
-        contractors: { enabled: false, types: {} }
-      };
-      Object.assign(merged?.personnel?.employees?.roles, tableData?.personnel?.employees?.roles);
-    }
-    if (tableData?.personnel?.contractors?.types) {
-      merged.personnel = merged.personnel || {
-        employees: { roles: {} },
-        contractors: { enabled: false, types: {} }
-      };
-      Object.assign(merged?.personnel?.contractors?.types, tableData?.personnel?.contractors?.types);
-      merged.personnel.contractors.enabled = tableData?.personnel?.contractors?.enabled;
-    }
+	// ADDED: Validate object structure to prevent type errors
+	validateObjectStructure(obj) {
+		if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
+			return {};
+		}
 
-    Object.entries(tableData || {})?.forEach(([key, value]) => {
-      if (key === 'personnel' || key === 'customCategories') return;
-      if (!value || typeof value !== 'object') return;
-      if (value?.items) {
-        if (!merged?.[key] || typeof merged?.[key] !== 'object') {
-          merged[key] = { items: {} };
-        }
-        merged[key].items = merged[key].items || {};
-        Object.assign(merged[key].items, value?.items);
-      } else {
-        merged[key] = value;
-      }
-    });
+		const validated = {};
+		Object.entries(obj)?.forEach(([key, value]) => {
+			if (value && typeof value === "object" && !Array.isArray(value)) {
+				validated[key] = { ...value };
+			}
+		});
 
-    // Merge custom categories
-    if (tableData?.customCategories) {
-      merged.customCategories = merged.customCategories || {};
-      Object.assign(merged?.customCategories, tableData?.customCategories);
-    } else if (!merged?.customCategories) {
-      merged.customCategories = {};
-    }
+		return validated;
+	},
 
-    return merged;
-  },
+	// ADDED: Get default cost structure
+	getDefaultCostStructure() {
+		return {
+			customCategories: {},
+		};
+	},
 
-  // ADDED: Remove specific cost item
-  async removeCostItem(scenarioId, categoryKey, itemKey) {
-    try {
-      return await costService?.removeCostItem(scenarioId, categoryKey, itemKey);
-    } catch (error) {
-      console.error('Error removing cost item:', error);
-      throw error;
-    }
-  }
+	// ADDED: Merge cost data structures safely
+	mergeCostData(scenarioCostData, tableCostData) {
+		const merged = this.validateCostData(scenarioCostData);
+		const tableData = this.validateCostData(tableCostData);
+
+		// Merge personnel data
+		if (tableData?.personnel?.employees?.roles) {
+			merged.personnel = merged.personnel || {
+				employees: { roles: {} },
+				contractors: { enabled: false, types: {} },
+			};
+			Object.assign(
+				merged?.personnel?.employees?.roles,
+				tableData?.personnel?.employees?.roles
+			);
+		}
+		if (tableData?.personnel?.contractors?.types) {
+			merged.personnel = merged.personnel || {
+				employees: { roles: {} },
+				contractors: { enabled: false, types: {} },
+			};
+			Object.assign(
+				merged?.personnel?.contractors?.types,
+				tableData?.personnel?.contractors?.types
+			);
+			merged.personnel.contractors.enabled =
+				tableData?.personnel?.contractors?.enabled;
+		}
+
+		Object.entries(tableData || {})?.forEach(([key, value]) => {
+			if (key === "personnel" || key === "customCategories") return;
+			if (!value || typeof value !== "object") return;
+			if (value?.items) {
+				if (!merged?.[key] || typeof merged?.[key] !== "object") {
+					merged[key] = { items: {} };
+				}
+				merged[key].items = merged[key].items || {};
+				Object.assign(merged[key].items, value?.items);
+			} else {
+				merged[key] = value;
+			}
+		});
+
+		// Merge custom categories
+		if (tableData?.customCategories) {
+			merged.customCategories = merged.customCategories || {};
+			Object.assign(merged?.customCategories, tableData?.customCategories);
+		} else if (!merged?.customCategories) {
+			merged.customCategories = {};
+		}
+
+		return merged;
+	},
+
+	// ADDED: Remove specific cost item
+	async removeCostItem(scenarioId, categoryKey, itemKey) {
+		try {
+			return await costService?.removeCostItem(
+				scenarioId,
+				categoryKey,
+				itemKey
+			);
+		} catch (error) {
+			console.error("Error removing cost item:", error);
+			throw error;
+		}
+	},
 };

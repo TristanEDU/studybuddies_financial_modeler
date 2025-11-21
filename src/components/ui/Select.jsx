@@ -118,7 +118,7 @@ const Select = React.forwardRef(({
                     id={selectId}
                     type="button"
                     className={cn(
-                        "flex h-10 w-full items-center justify-between rounded-md border border-input bg-white text-black px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+                        "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background text-foreground px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
                         error && "border-destructive focus:ring-destructive",
                         !hasValue && "text-muted-foreground"
                     )}
@@ -139,14 +139,21 @@ const Select = React.forwardRef(({
                         )}
 
                         {clearable && hasValue && !loading && (
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-4 w-4"
+                            <span
+                                role="button"
+                                tabIndex={0}
+                                className="inline-flex items-center justify-center h-4 w-4 hover:bg-muted rounded-sm cursor-pointer"
                                 onClick={handleClear}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    handleClear(e);
+                                  }
+                                }}
+                                aria-label="Clear selection"
                             >
                                 <X className="h-3 w-3" />
-                            </Button>
+                            </span>
                         )}
 
                         <ChevronDown className={cn("h-4 w-4 transition-transform", isOpen && "rotate-180")} />

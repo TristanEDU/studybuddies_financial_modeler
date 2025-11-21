@@ -2,7 +2,7 @@ import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
 import ErrorBoundary from "components/ErrorBoundary";
-import NotFound from "pages/NotFound";
+import NotFound from "./pages/financial-modeling-hub/NotFound";
 import FinancialModelingHub from './pages/financial-modeling-hub';
 import ScenarioComparison from './pages/scenario-comparison';
 import CostOptimizationLab from './pages/cost-optimization-lab';

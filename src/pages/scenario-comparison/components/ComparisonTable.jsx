@@ -142,6 +142,25 @@ const ComparisonTable = ({ scenarios, comparisonMode }) => {
       : <Icon name="ArrowDown" size={14} className="text-foreground" />;
   };
 
+  // Sort the scenarios based on sortConfig
+  const sortedScenarios = [...activeScenarios].sort((a, b) => {
+    if (!sortConfig?.key) return 0;
+    
+    const aValue = mockTableData?.[a]?.[sortConfig.key];
+    const bValue = mockTableData?.[b]?.[sortConfig.key];
+    
+    if (aValue === undefined || bValue === undefined) return 0;
+    
+    let comparison = 0;
+    if (typeof aValue === 'string') {
+      comparison = aValue.localeCompare(bValue);
+    } else {
+      comparison = aValue - bValue;
+    }
+    
+    return sortConfig.direction === 'asc' ? comparison : -comparison;
+  });
+
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
       <div className="flex items-center justify-between p-6 border-b border-border">
@@ -174,7 +193,7 @@ const ComparisonTable = ({ scenarios, comparisonMode }) => {
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {activeScenarios?.map((scenarioKey, scenarioIndex) => {
+            {sortedScenarios?.map((scenarioKey, scenarioIndex) => {
               const scenario = mockTableData?.[scenarioKey];
               if (!scenario) return null;
 
