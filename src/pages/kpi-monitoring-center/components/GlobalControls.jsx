@@ -45,7 +45,7 @@ const GlobalControls = ({ onDateRangeChange, onRefreshIntervalChange, onThreshol
   };
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+    <div className="bg-card border border-border rounded-lg p-6 mb-6">
       <div className="grid grid-cols-1 lg:grid-cols-16 gap-4 items-center">
         {/* Date Range Picker */}
         <div className="lg:col-span-4">
@@ -71,11 +71,11 @@ const GlobalControls = ({ onDateRangeChange, onRefreshIntervalChange, onThreshol
 
         {/* Live Mode Toggle */}
         <div className="lg:col-span-3 flex items-center space-x-3">
-          <label className="text-sm font-medium text-gray-700">Live Mode</label>
+          <label className="text-sm font-medium text-foreground">Live Mode</label>
           <button
             onClick={toggleLiveMode}
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-              isLiveMode ? 'bg-blue-600' : 'bg-gray-200'
+              isLiveMode ? 'bg-primary' : 'bg-muted'
             }`}
           >
             <span

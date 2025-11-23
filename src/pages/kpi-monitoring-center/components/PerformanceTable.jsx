@@ -39,9 +39,9 @@ const PerformanceTable = ({ data }) => {
   };
 
   const getVarianceColor = (value) => {
-    if (value > 0) return 'text-green-600';
-    if (value < 0) return 'text-red-600';
-    return 'text-gray-600';
+    if (value > 0) return 'text-success';
+    if (value < 0) return 'text-destructive';
+    return 'text-muted-foreground';
   };
 
   const columns = [
@@ -55,16 +55,16 @@ const PerformanceTable = ({ data }) => {
   ];
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-200">
+    <div className="bg-card rounded-lg border border-border overflow-hidden">
+      <div className="px-6 py-4 border-b border-border">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">Monthly Performance Summary</h3>
+          <h3 className="text-lg font-semibold text-foreground">Monthly Performance Summary</h3>
           <div className="flex items-center space-x-2">
-            <button className="flex items-center space-x-1 px-3 py-1 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50">
+            <button className="flex items-center space-x-1 px-3 py-1 text-sm text-muted-foreground hover:text-foreground border border-border rounded-md hover:bg-muted">
               <Icon name="Download" size={14} />
               <span>Export</span>
             </button>
-            <button className="flex items-center space-x-1 px-3 py-1 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50">
+            <button className="flex items-center space-x-1 px-3 py-1 text-sm text-muted-foreground hover:text-foreground border border-border rounded-md hover:bg-muted">
               <Icon name="Filter" size={14} />
               <span>Filter</span>
             </button>
@@ -73,13 +73,13 @@ const PerformanceTable = ({ data }) => {
       </div>
       <div className="overflow-x-auto">
         <table className="w-full">
-          <thead className="bg-gray-50">
+          <thead className="bg-muted/50">
             <tr>
               {columns?.map((column) => (
                 <th
                   key={column?.key}
-                  className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${
-                    column?.sortable ? 'cursor-pointer hover:bg-gray-100' : ''
+                  className={`px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider ${
+                    column?.sortable ? 'cursor-pointer hover:bg-muted' : ''
                   }`}
                   onClick={() => column?.sortable && handleSort(column?.key)}
                 >
@@ -92,7 +92,7 @@ const PerformanceTable = ({ data }) => {
                             ? sortDirection === 'asc' ? 'ChevronUp' : 'ChevronDown' :'ChevronsUpDown'
                         } 
                         size={12} 
-                        className="text-gray-400"
+                        className="text-muted-foreground"
                       />
                     )}
                   </div>
@@ -100,9 +100,9 @@ const PerformanceTable = ({ data }) => {
               ))}
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-card divide-y divide-border">
             {sortedData?.map((row, index) => (
-              <tr key={index} className="hover:bg-gray-50">
+              <tr key={index} className="hover:bg-muted/30">
                 {columns?.map((column) => (
                   <td key={column?.key} className="px-6 py-4 whitespace-nowrap text-sm">
                     {column?.key === 'variance' ? (
@@ -110,7 +110,7 @@ const PerformanceTable = ({ data }) => {
                         {column?.format ? column?.format(row?.[column?.key]) : row?.[column?.key]}
                       </span>
                     ) : (
-                      <span className="text-gray-900">
+                      <span className="text-foreground">
                         {column?.format ? column?.format(row?.[column?.key]) : row?.[column?.key]}
                       </span>
                     )}

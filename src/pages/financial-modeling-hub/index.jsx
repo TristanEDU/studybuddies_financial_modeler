@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import toast, { Toaster } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { financialService } from '../../services/financialService';
+import { useFinancialModel } from '../../hooks/useFinancialModel';
 import Header from '../../components/ui/Header';
 import CostInputPanel from './components/CostInputPanel';
 import BreakevenChart from './components/BreakevenChart';
@@ -12,50 +14,46 @@ import ScenarioControls from './components/ScenarioControls';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 import { generateFinancialAnalysis } from '../../services/aiAnalysisService';
+import ImportDialog from '../../components/ui/ImportDialog';
+import { FileImportUtils } from '../../utils/fileImportUtils';
+import PricingTierEditor from '../../components/ui/PricingTierEditor';
+import { STANDARD_CATEGORY_CONFIGS, createDefaultCostStructure } from '../../config/financialDefaults';
 
 const FinancialModelingHub = () => {
   const { user, isAuthenticated, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
 
-  // FIXED: Initialize with proper nested structure and defensive object creation
-  const [costs, setCosts] = useState({
-    personnel: {
-      employees: {
-        roles: {}
-      },
-      contractors: {
-        enabled: false,
-        types: {}
-      }
-    },
-    operations: {
-      items: {}
-    },
-    marketing: {
-      items: {}
-    },
-    technology: {
-      items: {}
-    },
-    customCategories: {}
-  });
+  const {
+    loading,
+    error,
+    costs,
+    setCosts,
+    scenarios,
+    setScenarios,
+    activeScenario,
+    setActiveScenario,
+    pricingScenarios,
+    setPricingScenarios,
+    activePricing,
+    setActivePricing,
+    variableCostPerMember,
+    setVariableCostPerMember,
+    loadScenarios,
+    handleCostChange,
+    handleAddStandardCategory,
+    handleRemoveCategory,
+    calculateTotalCosts,
+    persistCosts
+  } = useFinancialModel(user);
 
-  const [pricingScenarios] = useState([
-    { id: 'basic', name: 'Basic', price: 29, breakeven: 245 },
-    { id: 'standard', name: 'Standard', price: 49, breakeven: 147 },
-    { id: 'premium', name: 'Premium', price: 99, breakeven: 73 },
-    { id: 'enterprise', name: 'Enterprise', price: 199, breakeven: 36 }
-  ]);
-
-  const [activePricing, setActivePricing] = useState('standard');
-  const [scenarios, setScenarios] = useState([]);
-  const [activeScenario, setActiveScenario] = useState(null);
   const [aiInsights, setAiInsights] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [analysisStartTime, setAnalysisStartTime] = useState(null);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [isPricingEditorOpen, setIsPricingEditorOpen] = useState(false);
+
+
 
   // Global dropdown management state (Fix for bugs #2-#6)
   const [openDropdown, setOpenDropdown] = useState(null);
@@ -81,9 +79,7 @@ const FinancialModelingHub = () => {
     setAiInsights(null);
   }, []);
 
-  // Add this block - Quick Action Operations definitions before usage
-  const quickActionOperations = {
-    reduceMarketing20: () => {
+  const reduceMarketing20 = useCallback(() => {
       setCosts(prev => {
         const newCosts = JSON.parse(JSON.stringify(prev));
         
@@ -95,16 +91,17 @@ const FinancialModelingHub = () => {
             }
           });
         }
+        
+        setTimeout(() => persistCosts(newCosts), 0);
         return newCosts;
       });
-    },
-    
-    addEmployee: () => {
+  }, [persistCosts, setCosts]);
+
+  /* const addEmployee = useCallback(() => {
       setCosts(prev => {
         const newCosts = JSON.parse(JSON.stringify(prev));
         const employeeId = `employee_${Date.now()}`;
         
-        // Ensure proper structure exists
         if (!newCosts?.personnel || typeof newCosts?.personnel !== 'object') {
           newCosts.personnel = { employees: { roles: {} }, contractors: { enabled: false, types: {} } };
         }
@@ -125,129 +122,40 @@ const FinancialModelingHub = () => {
           count: 1
         };
         
+        setTimeout(() => persistCosts(newCosts), 0);
         return newCosts;
       });
-    },
-
-    // ADDED: Remove item functionality
-    removeItem: (categoryKey, itemKey) => {
-      setCosts(prev => {
-        const newCosts = JSON.parse(JSON.stringify(prev));
-        
-        if (categoryKey === 'personnel') {
-          if (newCosts?.personnel?.employees?.roles?.[itemKey]) {
-            delete newCosts?.personnel?.employees?.roles?.[itemKey];
-          }
-        } else if (['operations', 'marketing', 'technology']?.includes(categoryKey)) {
-          if (newCosts?.[categoryKey]?.items?.[itemKey]) {
-            delete newCosts?.[categoryKey]?.items?.[itemKey];
-          }
-        } else if (newCosts?.customCategories?.[categoryKey]?.items?.[itemKey]) {
-          delete newCosts?.customCategories?.[categoryKey]?.items?.[itemKey];
-        }
-        
-        return newCosts;
-      });
-    },
-
-    // ADDED: Add category functionality
-    addCategory: (categoryName, categoryType = 'custom') => {
-      const sanitizedName = categoryName?.toLowerCase()?.replace(/[^a-z0-9]/g, '_');
-      
-      setCosts(prev => {
-        const newCosts = JSON.parse(JSON.stringify(prev));
-        
-        if (!newCosts?.customCategories || typeof newCosts?.customCategories !== 'object') {
-          newCosts.customCategories = {};
-        }
-        
-        newCosts.customCategories[sanitizedName] = {
-          name: categoryName,
-          type: categoryType,
-          enabled: true,
-          items: {}
-        };
-        
-        return newCosts;
-      });
-    }
-  };
-
-  // ENHANCED: Cost calculation with proper structure handling
-  const calculateTotalCosts = useCallback(() => {
-    let totalCosts = 0;
-
-    try {
-      // Personnel costs - with structure validation
-      if (costs?.personnel?.employees?.roles && typeof costs?.personnel?.employees?.roles === 'object') {
-        Object.values(costs?.personnel?.employees?.roles)?.forEach(role => {
-          if (role && typeof role === 'object' && role?.enabled && role?.value) {
-            totalCosts += Number(role?.value) * Number(role?.count || 1);
-          }
-        });
-      }
-
-      if (costs?.personnel?.contractors?.enabled && costs?.personnel?.contractors?.types && 
-          typeof costs?.personnel?.contractors?.types === 'object') {
-        Object.values(costs?.personnel?.contractors?.types)?.forEach(contractor => {
-          if (contractor && typeof contractor === 'object' && contractor?.enabled && contractor?.value) {
-            totalCosts += Number(contractor?.value) * Number(contractor?.hours || 160);
-          }
-        });
-      }
-
-      // Category items - with structure validation
-      ['operations', 'marketing', 'technology']?.forEach(category => {
-        if (costs?.[category]?.items && typeof costs?.[category]?.items === 'object') {
-          Object.values(costs?.[category]?.items)?.forEach(item => {
-            if (item && typeof item === 'object' && item?.enabled && item?.value) {
-              totalCosts += Number(item?.value);
-            }
-          });
-        }
-      });
-
-      // Custom categories - with structure validation
-      if (costs?.customCategories && typeof costs?.customCategories === 'object') {
-        Object.values(costs?.customCategories)?.forEach(category => {
-          if (category && typeof category === 'object' && category?.enabled && category?.items && 
-              typeof category?.items === 'object') {
-            Object.values(category?.items)?.forEach(item => {
-              if (item && typeof item === 'object' && item?.enabled && item?.value) {
-                totalCosts += Number(item?.value);
-              }
-            });
-          }
-        });
-      }
-    } catch (error) {
-      console.error('Error calculating costs:', error);
-      return 0;
-    }
-
-    return totalCosts;
-  }, [costs]);
+  }, [persistCosts, setCosts]); */
 
   // Generate breakeven analysis data
   const generateBreakevenData = useCallback(() => {
     let totalCosts = calculateTotalCosts();
     const currentPricing = pricingScenarios?.find(p => p?.id === activePricing);
-    const pricePerMember = currentPricing?.price || 49;
+    
+    // Convert pricing to monthly equivalent for calculations
+    const getMonthlyPrice = (tier) => {
+      if (!tier) return 49;
+      const period = tier.billingPeriod || 'monthly';
+      if (period === 'monthly') return tier.price;
+      if (period === 'annual') return tier.price / 12;
+      if (period === 'lifetime') return tier.price / 60; // Assume 5 years
+      return tier.price;
+    };
+    
+    const pricePerMember = getMonthlyPrice(currentPricing);
     
     const data = [];
     for (let members = 0; members <= 500; members += 25) {
       const revenue = members * pricePerMember;
-      const variableCosts = members * 5; // $5 per member variable cost
-      const totalMonthlyCosts = totalCosts + variableCosts;
       
       data?.push({
         members,
         revenue,
-        costs: totalMonthlyCosts
+        costs: totalCosts
       });
     }
 
-    const breakevenMembers = Math.ceil(totalCosts / (pricePerMember - 5));
+    const breakevenMembers = totalCosts > 0 ? Math.ceil(totalCosts / pricePerMember) : 0;
     const breakevenRevenue = breakevenMembers * pricePerMember;
 
     return {
@@ -264,31 +172,78 @@ const FinancialModelingHub = () => {
   const generateMetrics = useCallback(() => {
     let totalCosts = calculateTotalCosts();
     const currentPricing = pricingScenarios?.find(p => p?.id === activePricing);
-    const pricePerMember = currentPricing?.price || 49;
-    const breakevenMembers = Math.ceil(totalCosts / (pricePerMember - 5));
+    
+    // Convert pricing to monthly equivalent for calculations
+    const getMonthlyPrice = (tier) => {
+      if (!tier) return 49;
+      const period = tier.billingPeriod || 'monthly';
+      if (period === 'monthly') return tier.price;
+      if (period === 'annual') return tier.price / 12;
+      if (period === 'lifetime') return tier.price / 60; // Assume 5 years
+      return tier.price;
+    };
+    
+    const pricePerMember = getMonthlyPrice(currentPricing);
+    const breakevenMembers = totalCosts > 0 ? Math.ceil(totalCosts / pricePerMember) : 0;
+    
+    // Calculate actual MRR based on pricing tiers
+    let totalMRR = 0;
+    let totalMembers = 0;
+    pricingScenarios?.forEach(tier => {
+      const monthlyPrice = getMonthlyPrice(tier);
+      const members = tier?.members || 0;
+      totalMRR += monthlyPrice * members;
+      totalMembers += members;
+    });
+    
+    // Calculate marketing costs for CAC
+    const marketingCosts = costs?.marketing?.items ? 
+      Object.values(costs.marketing.items).reduce((sum, item) => 
+        sum + (parseFloat(item?.value) || 0) * (item?.count || 1), 0
+      ) : 0;
+    
+    // Assume 10% of current members are new acquisitions per month
+    const newMembersPerMonth = Math.max(Math.ceil(totalMembers * 0.1), 1);
+    const calculatedCAC = newMembersPerMonth > 0 ? Math.round(marketingCosts / newMembersPerMonth) : 0;
+    
+    // Calculate LTV (assume 24 month average customer lifetime)
+    const avgRevenuePerUser = totalMembers > 0 ? totalMRR / totalMembers : pricePerMember;
+    const avgCustomerLifetimeMonths = 24;
+    const calculatedLTV = Math.round(avgRevenuePerUser * avgCustomerLifetimeMonths);
+    
+    // Calculate LTV:CAC ratio
+    const ltvCacRatio = calculatedCAC > 0 ? calculatedLTV / calculatedCAC : 0;
+    
+    // Calculate churn rate (assume 5% base churn, adjust based on ratio health)
+    const baseChurnRate = 5.0;
+    const churnRate = ltvCacRatio >= 3 ? baseChurnRate * 0.8 : ltvCacRatio >= 2 ? baseChurnRate : baseChurnRate * 1.2;
+    
+    // Calculate runway based on assumed cash reserves
+    const assumedCashReserves = totalCosts * 18; // 18 months of current burn
+    const runwayMonths = totalCosts > 0 ? Math.floor(assumedCashReserves / totalCosts) : 0;
     
     return {
       breakevenMembers,
       breakevenRevenue: breakevenMembers * pricePerMember,
       breakevenChange: -2.3,
       monthlyBurnRate: totalCosts,
-      runwayMonths: 18,
+      runwayMonths,
       burnRateChange: 5.2,
       profitabilityThreshold: totalCosts * 1.2,
-      profitMargin: 15.8,
+      profitMargin: totalMRR > totalCosts ? ((totalMRR - totalCosts) / totalMRR * 100).toFixed(1) : 0,
       profitabilityChange: 1.7,
-      cac: 125,
-      ltv: 450,
-      ltvCacRatio: 3.6,
+      cac: calculatedCAC,
+      ltv: calculatedLTV,
+      ltvCacRatio: parseFloat(ltvCacRatio.toFixed(1)),
       cacChange: -8.1,
-      mrr: breakevenMembers * pricePerMember * 0.8,
-      mrrGrowth: 12.4,
+      mrr: Math.round(totalMRR),
+      mrrGrowth: totalMRR > 0 && totalMembers > 0 ? 12.4 : 0,
       mrrChange: 12.4,
-      churnRate: 4.2,
-      retentionRate: 95.8,
+      churnRate: parseFloat(churnRate.toFixed(1)),
+      retentionRate: parseFloat((100 - churnRate).toFixed(1)),
       churnChange: -0.8
     };
-  }, [calculateTotalCosts, pricingScenarios, activePricing]);
+  }, [calculateTotalCosts, pricingScenarios, activePricing, costs]);
 
   // Global event listeners for dropdown management (Fix for bugs #3-#5)
   useEffect(() => {
@@ -342,146 +297,7 @@ const FinancialModelingHub = () => {
     }
   }, [isAuthenticated, authLoading, navigate]);
 
-  // FIXED: Enhanced scenario loading with proper data structure validation
-  const loadScenarios = useCallback(async () => {
-    if (!user) return;
-    
-    try {
-      setLoading(true);
-      const userScenarios = await financialService?.getScenarios();
-      
-      if (userScenarios?.length > 0) {
-        setScenarios(userScenarios);
-        
-        // Load the first scenario with detailed cost data
-        const detailedScenario = await financialService?.getScenarioWithCostData(userScenarios?.[0]?.id);
-        setActiveScenario(detailedScenario);
-        
-        // ENHANCED: Validate and structure cost data properly
-        if (detailedScenario?.costData) {
-          const validatedCostData = validateAndStructureCostData(detailedScenario?.costData);
-          setCosts(validatedCostData);
-        }
-      } else {
-        // Create default scenario with properly structured data
-        const defaultScenario = {
-          name: 'My First Scenario',
-          description: 'Default financial model to get started',
-          costData: createDefaultCostStructure(),
-          pricingData: { activePricing: 'standard' }
-        };
 
-        const newScenario = await financialService?.createScenario(defaultScenario);
-        setScenarios([newScenario]);
-        setActiveScenario(newScenario);
-        setCosts(newScenario?.costData);
-      }
-    } catch (err) {
-      setError('Failed to load financial scenarios. Please try again.');
-      console.error('Error loading scenarios:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
-
-  // ADDED: Helper function to validate and structure cost data
-  const validateAndStructureCostData = (rawCostData) => {
-    const defaultStructure = createDefaultCostStructure();
-    
-    if (!rawCostData || typeof rawCostData !== 'object') {
-      return defaultStructure;
-    }
-
-    // Deep merge with validation
-    const structuredData = { ...defaultStructure };
-    
-    Object.keys(rawCostData)?.forEach(categoryKey => {
-      const categoryData = rawCostData?.[categoryKey];
-      
-      if (categoryData && typeof categoryData === 'object') {
-        // Ensure proper structure for each category
-        if (categoryKey === 'personnel') {
-          structuredData.personnel = {
-            employees: {
-              roles: { ...(categoryData?.employees?.roles || {}) }
-            },
-            contractors: {
-              enabled: Boolean(categoryData?.contractors?.enabled),
-              types: { ...(categoryData?.contractors?.types || {}) }
-            }
-          };
-        } else if (['operations', 'marketing', 'technology']?.includes(categoryKey)) {
-          structuredData[categoryKey] = {
-            items: { ...(categoryData?.items || {}) }
-          };
-        } else if (categoryKey === 'customCategories') {
-          structuredData.customCategories = { ...categoryData };
-        }
-      }
-    });
-
-    return structuredData;
-  };
-
-  // ADDED: Helper to create default cost structure
-  const createDefaultCostStructure = () => ({
-    personnel: {
-      employees: {
-        roles: {
-          developer: {
-            name: 'Developer',
-            value: 8000,
-            minValue: 0,
-            maxValue: 15000,
-            step: 500,
-            enabled: true,
-            count: 2
-          }
-        }
-      },
-      contractors: {
-        enabled: false,
-        types: {}
-      }
-    },
-    operations: {
-      items: {
-        rent: {
-          name: 'Office Rent',
-          value: 5000,
-          minValue: 0,
-          maxValue: 15000,
-          step: 500,
-          enabled: true
-        }
-      }
-    },
-    marketing: {
-      items: {
-        digital: {
-          name: 'Digital Advertising',
-          value: 10000,
-          minValue: 0,
-          maxValue: 50000,
-          step: 1000,
-          enabled: true
-        }
-      }
-    },
-    technology: {
-      items: {
-        software: {
-          name: 'Software Licenses',
-          value: 2000,
-          minValue: 0,
-          maxValue: 10000,
-          step: 250,
-          enabled: true
-        }
-      }
-    },
-    customCategories: {}
-  });
 
   useEffect(() => {
     if (user) {
@@ -558,13 +374,17 @@ const FinancialModelingHub = () => {
       breakdown?.push({ name: 'Personnel', value: personnelCost, type: 'fixed' });
     }
 
-    // Operations, Marketing, Technology
+    // Operations, Marketing, Technology - with quantity multiplication
     ['operations', 'marketing', 'technology']?.forEach(category => {
       let categoryTotal = 0;
       if (costs?.[category]?.items) {
-        Object.values(costs?.[category]?.items)?.forEach(item => {
+        Object.entries(costs?.[category]?.items)?.forEach(([key, item]) => {
+          if (key.endsWith('_quantity')) return;
           if (item?.enabled) {
-            categoryTotal += item?.value;
+            const quantityKey = `${key}_quantity`;
+            const siblingQuantity = costs?.[category]?.items?.[quantityKey];
+            const quantity = siblingQuantity !== undefined ? siblingQuantity : (item?._quantity || item?.quantity || item?.count || 1);
+            categoryTotal += item?.value * Number(quantity);
           }
         });
       }
@@ -577,14 +397,18 @@ const FinancialModelingHub = () => {
       }
     });
 
-    // Custom categories
+    // Custom categories - with quantity multiplication
     if (costs?.customCategories) {
       Object.entries(costs?.customCategories)?.forEach(([key, category]) => {
         if (category?.enabled && category?.items) {
           let categoryTotal = 0;
-          Object.values(category?.items)?.forEach(item => {
+          Object.entries(category?.items)?.forEach(([itemKey, item]) => {
+            if (itemKey.endsWith('_quantity')) return;
             if (item?.enabled) {
-              categoryTotal += item?.value;
+              const quantityKey = `${itemKey}_quantity`;
+              const siblingQuantity = category?.items?.[quantityKey];
+              const quantity = siblingQuantity !== undefined ? siblingQuantity : (item?._quantity || item?.quantity || item?.count || 1);
+              categoryTotal += item?.value * Number(quantity);
             }
           });
           if (categoryTotal > 0) {
@@ -662,134 +486,54 @@ const FinancialModelingHub = () => {
   const handlePricingScenarioChange = useCallback((scenarioId) => {
     setActivePricing(scenarioId);
     
-    // Trigger recalculation of all dependent metrics
-    const newMetrics = generateMetrics();
-    const newBreakevenData = generateBreakevenData();
-    
     // Update the active scenario with new pricing data
-    if (activeScenario) {
-      const updatedScenario = {
-        ...activeScenario,
+    setActiveScenario(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
         pricingData: { activePricing: scenarioId },
         updated_at: new Date()?.toISOString()
       };
-      setActiveScenario(updatedScenario);
-    }
+    });
 
     // Show feedback to user
     const currentPricing = pricingScenarios?.find(p => p?.id === scenarioId);
     if (currentPricing) {
-      // Brief visual feedback could be added here
-      console.log(`Switched to ${currentPricing?.name} pricing: $${currentPricing?.price}/mo`);
+      toast.success(`Switched to ${currentPricing?.name} - $${currentPricing?.price}/${currentPricing?.billingPeriod || 'month'}`);
     }
-  }, [activePricing, generateMetrics, generateBreakevenData, activeScenario, pricingScenarios]);
+    
+    // The useMemo hooks will automatically recalculate breakevenData and metrics
+    // when activePricing changes, so no manual recalculation needed
+  }, [pricingScenarios]);
 
-  // FIXED: Enhanced cost change handler with proper object structure validation
-  const handleCostChange = (category, field, value) => {
-    setCosts(prev => {
-      // Deep clone to avoid mutation issues
-      const newCosts = JSON.parse(JSON.stringify(prev));
-      
-      // Ensure category exists as object
-      if (!newCosts?.[category] || typeof newCosts?.[category] !== 'object') {
-        newCosts[category] = { items: {} };
-      }
 
-      const keys = field?.split('.');
-      let current = newCosts?.[category];
-      
-      // Navigate through nested structure, creating objects as needed
-      for (let i = 0; i < keys?.length - 1; i++) {
-        const key = keys?.[i];
-        
-        // CRITICAL FIX: Ensure each level is an object, not boolean
-        if (!current?.[key] || typeof current?.[key] !== 'object' || Array.isArray(current?.[key])) {
-          current[key] = {};
-        }
-        current = current?.[key];
-      }
-      
-      const finalKey = keys?.[keys?.length - 1];
-      
-      // Handle deletion (when value is null)
-      if (value === null && current && typeof current === 'object') {
-        delete current?.[finalKey];
-      } else if (current && typeof current === 'object') {
-        // FIXED: Only set value if current is a proper object
-        current[finalKey] = value;
-      }
-      
-      return newCosts;
-    });
-
-    // Auto-save to Supabase after changes
-    if (activeScenario?.id) {
-      const timeoutId = setTimeout(async () => {
-        try {
-          await financialService?.updateScenario(activeScenario?.id, {
-            cost_data: costs,
-            updated_at: new Date()?.toISOString()
-          });
-        } catch (error) {
-          console.error('Auto-save failed:', error);
-        }
-      }, 1000);
-
-      return () => clearTimeout(timeoutId);
-    }
-  };
 
   // FIXED: Enhanced toggle category with structure validation
-  const handleToggleCategory = (path, value) => {
-    setCosts(prev => {
-      const newCosts = JSON.parse(JSON.stringify(prev));
-      const keys = path?.split('.');
-      let current = newCosts;
-      
-      // Navigate and create structure as needed
-      for (let i = 0; i < keys?.length - 1; i++) {
-        const key = keys?.[i];
-        
-        // CRITICAL FIX: Ensure proper object structure
-        if (!current?.[key] || typeof current?.[key] !== 'object' || Array.isArray(current?.[key])) {
-          current[key] = {};
-        }
-        current = current?.[key];
-      }
-      
-      const finalKey = keys?.[keys?.length - 1];
-      
-      // Only set if current is proper object
-      if (current && typeof current === 'object') {
-        current[finalKey] = value;
-      }
-      
-      return newCosts;
-    });
-  };
-
   const handleScenarioChange = async (scenarioId) => {
     try {
       const detailedScenario = await financialService?.getScenarioWithCostData(scenarioId);
       if (detailedScenario) {
         setActiveScenario(detailedScenario);
         setCosts(detailedScenario?.costData || {});
+        toast.success(`Loaded ${detailedScenario.name}`);
       }
     } catch (err) {
-      setError('Failed to load scenario details. Please try again.');
+      toast.error('Failed to load scenario');
       console.error('Error loading scenario:', err);
     }
   };
 
   const handleSaveScenario = async (scenario) => {
     try {
-      setLoading(true);
-      if (activeScenario) {
-        // ENHANCED: Save with better error handling and cost data persistence
+      // Check if this is a new scenario by looking in scenarios array
+      const isNewScenario = !scenario?.id || !scenarios.find(s => s.id === scenario?.id);
+      
+      if (activeScenario && !isNewScenario) {
+        // ENHANCED: Update existing scenario with better error handling
         const updatedScenario = await financialService?.updateScenario(activeScenario?.id, {
           ...scenario,
-          name: activeScenario?.name,
-          description: activeScenario?.description,
+          name: scenario?.name || activeScenario?.name,
+          description: scenario?.description || activeScenario?.description,
           costData: costs,
           pricingData: { activePricing }
         });
@@ -797,28 +541,56 @@ const FinancialModelingHub = () => {
         setScenarios(prev => prev?.map(s => s?.id === updatedScenario?.id ? updatedScenario : s));
         setActiveScenario(updatedScenario);
         
-        // Show success feedback
-        console.log('Scenario saved successfully with cost data');
+        toast.success('Scenario saved successfully');
       } else {
+        // Create new scenario
         const newScenario = await financialService?.createScenario({
-          ...scenario,
+          name: scenario?.name || 'Untitled Scenario',
+          description: scenario?.description || `Created on ${new Date()?.toLocaleDateString()}`,
           costData: costs,
           pricingData: { activePricing }
         });
         
         setScenarios(prev => [...prev, newScenario]);
         setActiveScenario(newScenario);
+        toast.success('New scenario created successfully');
       }
     } catch (err) {
-      setError('Failed to save scenario. Please try again.');
+      toast.error('Failed to save scenario');
       console.error('Error saving scenario:', err);
-    } finally {
-      setLoading(false);
     }
   };
 
   const handleLoadScenario = (scenarioId) => {
     handleScenarioChange(scenarioId);
+  };
+
+  const handleDeleteScenario = async (scenarioId) => {
+    try {
+      // Prevent deleting the currently active scenario
+      if (scenarioId === activeScenario?.id) {
+        toast.error('Cannot delete the active scenario. Please switch to another scenario first.');
+        return;
+      }
+
+      // Confirm deletion
+      if (!window.confirm('Are you sure you want to delete this scenario? This action cannot be undone.')) {
+        return;
+      }
+
+      setLoading(true);
+      await financialService?.deleteScenario(scenarioId);
+      
+      // Remove from scenarios list
+      setScenarios(prev => prev?.filter(s => s?.id !== scenarioId));
+      toast.success('Scenario deleted successfully');
+    } catch (err) {
+      setError('Failed to delete scenario. Please try again.');
+      toast.error('Failed to delete scenario');
+      console.error('Error deleting scenario:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleExportData = (format) => {
@@ -830,15 +602,64 @@ const FinancialModelingHub = () => {
       exportedAt: new Date()?.toISOString()
     };
     
-    console.log(`Exporting data in ${format} format:`, data);
+    if (format === 'json') {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `scenario_${activeScenario?.name || 'export'}_${Date.now()}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } else if (format === 'csv') {
+      const csv = FileImportUtils.generateCSVTemplate();
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `cost_template_${Date.now()}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
   };
 
-  const handleImportData = (data) => {
-    if (data?.costs) {
-      setCosts(data?.costs);
+  const handleImportData = (importedCosts, metadata) => {
+    console.log('Importing costs:', importedCosts, 'Metadata:', metadata);
+    
+    // Update costs state with imported data
+    setCosts(importedCosts);
+    
+    // Show success message
+    if (metadata?.rowCount) {
+      alert(`Successfully imported ${metadata.rowCount} cost items using ${metadata.strategy} strategy!`);
     }
-    if (data?.scenario) {
-      setActiveScenario(data?.scenario);
+    
+    // Warnings if any
+    if (metadata?.warnings && metadata.warnings.length > 0) {
+      console.warn('Import warnings:', metadata.warnings);
+    }
+  };
+
+  const handleSavePricingTiers = (updatedTiers) => {
+    setPricingScenarios(updatedTiers);
+    
+    // If current active pricing doesn't exist in new tiers, switch to first tier
+    const activeExists = updatedTiers.some(tier => tier.id === activePricing);
+    if (!activeExists && updatedTiers.length > 0) {
+      setActivePricing(updatedTiers[0].id);
+    }
+    
+    // Persist to scenario if active
+    if (activeScenario?.id) {
+      financialService?.updateScenario(activeScenario.id, {
+        pricingData: { 
+          tiers: updatedTiers,
+          activePricing: activeExists ? activePricing : updatedTiers[0]?.id
+        }
+      }).catch(err => console.error('Failed to save pricing tiers:', err));
     }
   };
 
@@ -852,6 +673,42 @@ const FinancialModelingHub = () => {
       }));
     }
   }, [costs, activeScenario?.id]);
+
+  // Calculate data but skip expensive operations during loading/error states
+  // This keeps hook order consistent while avoiding performance issues
+  const shouldCalculate = !authLoading && !loading && !error;
+  
+  const breakevenData = useMemo(() => {
+    if (!shouldCalculate) return { data: [], breakeven: { members: 0, revenue: 0, costs: 0 } };
+    return generateBreakevenData();
+  }, [shouldCalculate, generateBreakevenData, costs]);
+  
+  const metrics = useMemo(() => {
+    if (!shouldCalculate) return {};
+    return generateMetrics();
+  }, [shouldCalculate, generateMetrics, costs]);
+  
+  const costBreakdown = useMemo(() => {
+    if (!shouldCalculate) return [];
+    return generateCostBreakdown();
+  }, [shouldCalculate, generateCostBreakdown, costs]);
+  
+  const revenueProjections = useMemo(() => {
+    if (!shouldCalculate) return [];
+    return generateRevenueProjections();
+  }, [shouldCalculate, generateRevenueProjections, costs]);
+  
+  const monthlyProjections = useMemo(() => {
+    if (!shouldCalculate) return [];
+    return generateMonthlyProjections();
+  }, [shouldCalculate, generateMonthlyProjections, costs]);
+
+  const pricingTiers = [
+    { id: 'basic', name: 'Basic', price: 29 },
+    { id: 'standard', name: 'Standard', price: 49 },
+    { id: 'premium', name: 'Premium', price: 99 },
+    { id: 'enterprise', name: 'Enterprise', price: 199 }
+  ];
 
   // Show loading state
   if (authLoading || loading) {
@@ -883,21 +740,9 @@ const FinancialModelingHub = () => {
     );
   }
 
-  const breakevenData = generateBreakevenData();
-  const metrics = generateMetrics();
-  const costBreakdown = generateCostBreakdown();
-  const revenueProjections = generateRevenueProjections();
-  const monthlyProjections = generateMonthlyProjections();
-
-  const pricingTiers = [
-    { id: 'basic', name: 'Basic', price: 29 },
-    { id: 'standard', name: 'Standard', price: 49 },
-    { id: 'premium', name: 'Premium', price: 99 },
-    { id: 'enterprise', name: 'Enterprise', price: 199 }
-  ];
-
   return (
     <div className="min-h-screen bg-background">
+      <Toaster position="top-right" />
       <Header closeAllDropdowns={closeAllDropdowns} />
       {/* Single Column Layout Container */}
       <div className="container mx-auto px-4 sm:px-6 py-6 sm:py-8 max-w-7xl">
@@ -1102,28 +947,18 @@ const FinancialModelingHub = () => {
           <div>
             <CostInputPanel
               costs={costs}
-              onCostChange={handleCostChange}
-              onToggleCategory={handleToggleCategory}
-              onRemoveItem={quickActionOperations?.removeItem}
-              onAddCategory={quickActionOperations?.addCategory}
+              onCostChange={handleCostChange.updateItem}
+              onRemoveItem={handleCostChange.removeItem}
+              onAddCategory={handleCostChange.addCategory}
+              onAddStandardCategory={handleAddStandardCategory}
+              onRemoveCategory={handleRemoveCategory}
+              standardCategories={STANDARD_CATEGORY_CONFIGS}
               openDropdown={handleOpenDropdown}
               closeAllDropdowns={closeAllDropdowns}
               currentOpenDropdown={openDropdown}
             />
           </div>
           
-          {/* Scenario Controls - Full Width */}
-          <div>
-            <ScenarioControls
-              scenarios={scenarios}
-              activeScenario={activeScenario}
-              onScenarioChange={handleScenarioChange}
-              onSaveScenario={handleSaveScenario}
-              onLoadScenario={handleLoadScenario}
-              onExportData={handleExportData}
-              onImportData={handleImportData}
-            />
-          </div>
 
           {/* Enhanced Breakeven Chart with working pricing scenarios */}
           <div>
@@ -1133,6 +968,7 @@ const FinancialModelingHub = () => {
               pricingScenarios={pricingScenarios}
               activePricing={activePricing}
               onPricingChange={handlePricingScenarioChange}
+              onEditPricingTiers={() => setIsPricingEditorOpen(true)}
             />
           </div>
           
@@ -1160,6 +996,21 @@ const FinancialModelingHub = () => {
               <h4 className="text-sm font-semibold text-foreground">Quick Actions</h4>
             </div>
             
+          {/* Scenario Controls - Full Width */}
+          <div>
+            <ScenarioControls
+              scenarios={scenarios}
+              activeScenario={activeScenario}
+              onScenarioChange={handleScenarioChange}
+              onSaveScenario={handleSaveScenario}
+              onLoadScenario={handleLoadScenario}
+              onDeleteScenario={handleDeleteScenario}
+              onExportData={handleExportData}
+              onImportData={handleImportData}
+              onOpenImportDialog={() => setIsImportDialogOpen(true)}
+            />
+          </div>
+            
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <Button
                 variant="outline"
@@ -1177,7 +1028,7 @@ const FinancialModelingHub = () => {
                 fullWidth
                 iconName="TrendingDown"
                 iconSize={14}
-                onClick={quickActionOperations?.reduceMarketing20}
+                onClick={reduceMarketing20}
                 className="text-xs"
               >
                 Reduce Marketing 20%
@@ -1188,7 +1039,7 @@ const FinancialModelingHub = () => {
                 fullWidth
                 iconName="Users"
                 iconSize={14}
-                onClick={quickActionOperations?.addEmployee}
+                // onClick={addEmployee}
                 className="text-xs"
               >
                 Add Employee
@@ -1284,6 +1135,22 @@ const FinancialModelingHub = () => {
           </div>
         </div>
       </div>
+
+      {/* Import Dialog */}
+      <ImportDialog
+        isOpen={isImportDialogOpen}
+        onClose={() => setIsImportDialogOpen(false)}
+        onImport={handleImportData}
+        currentCosts={costs}
+      />
+
+      {/* Pricing Tier Editor */}
+      <PricingTierEditor
+        isOpen={isPricingEditorOpen}
+        onClose={() => setIsPricingEditorOpen(false)}
+        pricingTiers={pricingScenarios}
+        onSave={handleSavePricingTiers}
+      />
     </div>
   );
 };

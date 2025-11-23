@@ -1,12 +1,14 @@
-import OpenAI from 'openai';
-
 /**
- * Initializes the OpenAI client with the API key from environment variables.
- * @returns {OpenAI} Configured OpenAI client instance.
+ * DEPRECATED: OpenAI client has been moved to server-side (Supabase Edge Functions)
+ * for security reasons. The API key is no longer exposed in the browser.
+ *
+ * All OpenAI requests should now go through the Supabase Edge Function proxy.
+ * See: supabase/functions/openai-proxy/index.ts
+ * Usage: supabase.functions.invoke('openai-proxy', { body: { messages, model, ... } })
  */
-const openai = new OpenAI({
-  apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-  dangerouslyAllowBrowser: true, // Required for client-side usage in React
-});
 
-export default openai;
+console.warn(
+	"openaiClient.js is deprecated. Use Supabase Edge Function proxy instead."
+);
+
+export default null;
