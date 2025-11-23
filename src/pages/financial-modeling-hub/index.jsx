@@ -97,7 +97,7 @@ const FinancialModelingHub = () => {
       });
   }, [persistCosts, setCosts]);
 
-  const addEmployee = useCallback(() => {
+  /* const addEmployee = useCallback(() => {
       setCosts(prev => {
         const newCosts = JSON.parse(JSON.stringify(prev));
         const employeeId = `employee_${Date.now()}`;
@@ -125,7 +125,7 @@ const FinancialModelingHub = () => {
         setTimeout(() => persistCosts(newCosts), 0);
         return newCosts;
       });
-  }, [persistCosts, setCosts]);
+  }, [persistCosts, setCosts]); */
 
   // Generate breakeven analysis data
   const generateBreakevenData = useCallback(() => {
@@ -959,20 +959,6 @@ const FinancialModelingHub = () => {
             />
           </div>
           
-          {/* Scenario Controls - Full Width */}
-          <div>
-            <ScenarioControls
-              scenarios={scenarios}
-              activeScenario={activeScenario}
-              onScenarioChange={handleScenarioChange}
-              onSaveScenario={handleSaveScenario}
-              onLoadScenario={handleLoadScenario}
-              onDeleteScenario={handleDeleteScenario}
-              onExportData={handleExportData}
-              onImportData={handleImportData}
-              onOpenImportDialog={() => setIsImportDialogOpen(true)}
-            />
-          </div>
 
           {/* Enhanced Breakeven Chart with working pricing scenarios */}
           <div>
@@ -1010,6 +996,21 @@ const FinancialModelingHub = () => {
               <h4 className="text-sm font-semibold text-foreground">Quick Actions</h4>
             </div>
             
+          {/* Scenario Controls - Full Width */}
+          <div>
+            <ScenarioControls
+              scenarios={scenarios}
+              activeScenario={activeScenario}
+              onScenarioChange={handleScenarioChange}
+              onSaveScenario={handleSaveScenario}
+              onLoadScenario={handleLoadScenario}
+              onDeleteScenario={handleDeleteScenario}
+              onExportData={handleExportData}
+              onImportData={handleImportData}
+              onOpenImportDialog={() => setIsImportDialogOpen(true)}
+            />
+          </div>
+            
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <Button
                 variant="outline"
@@ -1038,7 +1039,7 @@ const FinancialModelingHub = () => {
                 fullWidth
                 iconName="Users"
                 iconSize={14}
-                onClick={addEmployee}
+                // onClick={addEmployee}
                 className="text-xs"
               >
                 Add Employee

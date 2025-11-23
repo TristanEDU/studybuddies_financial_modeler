@@ -5,46 +5,81 @@ import Input from '../../../components/ui/Input';
 
 import Select from '../../../components/ui/Select';
 
+/**
+ * ValidationUtils: A collection of helper functions to validate user input.
+ * These ensure that the data entered for costs, names, and counts are within reasonable limits
+ * and safe to use (e.g., preventing negative numbers or extremely large values).
+ */
 // Enhanced validation utilities
 const ValidationUtils = {
+  // Checks if a cost value is a valid number between 0 and 10,000,000
   validateCostValue: (value) => {
     const num = parseFloat(value);
     return !isNaN(num) && num >= 0 && num <= 10000000;
   },
   
+  // Checks if a category name is a valid string, not empty, and not too long
   validateCategoryName: (name) => {
     return name && typeof name === 'string' && name?.trim()?.length > 0 && name?.length <= 50;
   },
   
+  // Checks if an employee count is a valid integer between 0 and 10,000
   validateEmployeeCount: (count) => {
     const num = parseInt(count);
     return !isNaN(num) && num >= 0 && num <= 10000;
   },
   
+  // Cleans up input strings to remove potentially harmful characters like < and >
   sanitizeInput: (input) => {
     return typeof input === 'string' ? input?.trim()?.replace(/[<>]/g, '') : input;
   }
 };
 
+/**
+ * resolvePath: A helper function to safely access nested properties in an object.
+ * For example, if you have an object { a: { b: { c: 1 } } } and want to access 'a.b.c',
+ * this function handles the traversal and returns undefined if any part of the path is missing.
+ * 
+ * This function is what allows us to actually access the properties of say a new cost category and item without it actually being hard coded in, giving us more dynamic ability to create custom items.
+ */
 const resolvePath = (source, path) => {
-  if (!path || !source || typeof source !== 'object') return undefined;
-  const keys = path?.split('.');
-  let current = source;
-
-  for (const key of keys) {
-    if (!current || typeof current !== 'object') {
-      return undefined;
-    }
-    current = current?.[key];
+  if (!path || typeof path !== 'string' || path.trim() === '') {
+    console.error('Path is missing or empty');
+    return undefined;
   }
+if (!source || typeof source !== 'object' || source === null) {
+  console.error('Source is not an object');
+  return undefined;
+}
 
-  return current;
+const keys = path.split('.');
+let current = source;
+
+for (let i =0; i < keys.length; i++) {
+  const key = keys[i];
+  if (!current || typeof current !== 'object') {
+    console.error(`Failed to traverse path at key '${key}' in path '${keys.slice(0, i + 1).join('.')}'. current value:`, current)
+    return undefined;
+
+  }
+  current = current[key];
+}
+return current;
 };
 
+/**
+ * formatKeyLabel: Converts a technical key string (like "my_variable_name") into a readable label (like "My Variable Name").
+ * It replaces underscores/hyphens with spaces and capitalizes the first letter of each word.
+ */
 const formatKeyLabel = (key = '') => key
   ?.replace(/[_-]/g, ' ')
   ?.replace(/\b\w/g, (letter) => letter?.toUpperCase());
 
+/**
+ * useDebouncedCallback: A custom hook that delays the execution of a function.
+ * This is useful for inputs where we don't want to trigger an update on every single keystroke,
+ * but rather wait until the user has stopped typing for a short moment (the delay).
+ */
 // Debounced input handler
 const useDebouncedCallback = (callback, delay) => {
   const timeoutRef = useRef(null);
@@ -60,6 +95,11 @@ const useDebouncedCallback = (callback, delay) => {
   }, [callback, delay]);
 };
 
+/**
+ * ErrorBoundary: A component that catches errors in its children components.
+ * If a crash occurs inside the wrapped components, this will display a fallback error message
+ * instead of crashing the entire application.
+ */
 // Error boundary
 const ErrorBoundary = ({ children, fallback }) => {
   const [hasError, setHasError] = useState(false);
@@ -77,6 +117,14 @@ const ErrorBoundary = ({ children, fallback }) => {
   return children;
 };
 
+/**
+ * CostInputPanel: The main component for managing and inputting financial costs.
+ * It allows users to:
+ * - View and edit cost categories (like Personnel, Marketing, etc.)
+ * - Add new custom categories and items
+ * - Adjust values using sliders or direct input
+ * - Change currency and time period settings
+ */
 const CostInputPanel = ({ 
   costs, 
   onCostChange, 
@@ -89,39 +137,48 @@ const CostInputPanel = ({
   closeAllDropdowns, 
   currentOpenDropdown 
 }) => {
+  // State management for the component
   const [state, setState] = useState({
-    expandedCategories: {},
-    currency: 'USD',
-    period: 'monthly',
-    showAddCategory: false,
-    newCategoryName: '',
-    newCategoryType: 'fixed',
-    showCustomAmountModal: false,
-    customAmountTarget: null,
-    customAmount: '',
-    showAddItemModal: false,
-    selectedCategory: null,
-    newItemForm: {
+    expandedCategories: {}, // Tracks which categories are expanded (open) in the UI
+    currency: 'USD',        // Current selected currency
+    period: 'monthly',      // Current selected time period (e.g., monthly, annually)
+    showAddCategory: false, // Controls visibility of the "Add Category" modal
+    newCategoryName: '',    // Stores input for new category name
+    newCategoryType: 'fixed', // Stores input for new category type
+    showCustomAmountModal: false, // Controls visibility of the custom amount input modal
+    customAmountTarget: null,     // Stores which item is being edited in the custom amount modal
+    customAmount: '',             // Stores the value entered in the custom amount modal
+    showAddItemModal: false,      // Controls visibility of the "Add Item" modal
+    selectedCategory: null,       // Stores which category a new item is being added to
+    newItemForm: {                // Stores input data for a new item
       name: '',
       value: 0,
       quantity: 1,
       type: 'fixed'
     },
-    isLoading: false,
-    errors: {}
+    isLoading: false, // Indicates if an async operation is in progress
+    errors: {}        // Stores validation error messages
   });
 
   const currencyRef = useRef();
   const periodRef = useRef();
   const containerRef = useRef();
+
+  // Helper to extract the root category from a path string (e.g., "personnel.employees" -> "personnel")
   const getRootCategory = useCallback((categoryPath = '') => categoryPath?.split('.')?.[0] || '', []);
+  
+  // Helper to retrieve data for a specific category from the costs object
   const getCategoryData = useCallback((categoryPath) => {
     if (!categoryPath) return null;
     return resolvePath(costs, categoryPath);
   }, [costs]);
+  
+  // Helper to check if a field belongs to a personnel role (requires special handling)
   const isPersonnelRoleField = useCallback((categoryPath, fieldPath) => {
     return getRootCategory(categoryPath) === 'personnel' && fieldPath?.startsWith('employees.roles.');
   }, [getRootCategory]);
+  
+  // Helper to determine the correct path for the quantity field of an item
   const getQuantityFieldPath = useCallback((categoryPath, fieldPath) => {
     if (isPersonnelRoleField(categoryPath, fieldPath)) {
       return `${fieldPath}.count`;
@@ -166,6 +223,11 @@ const CostInputPanel = ({
     (customCategoryEntries?.length || 0) > 0
   ), [activeStandardCategoryKeys, additionalCategories, customCategoryEntries]);
 
+  /**
+   * debouncedCostChange: Updates the cost data after a short delay.
+   * This prevents excessive updates and re-renders while the user is sliding a slider or typing.
+   * It also performs validation before applying the change.
+   */
   // Debounced cost change handler
   const debouncedCostChange = useDebouncedCallback((category, field, value) => {
     if (ValidationUtils?.validateCostValue(value) || value === 0) {
@@ -183,6 +245,7 @@ const CostInputPanel = ({
   }, 300);
 
   // Enhanced dropdown handlers
+  // Toggles the visibility of the currency selection dropdown
   const handleCurrencyDropdownToggle = useCallback((e) => {
     try {
       e?.stopPropagation();
@@ -197,6 +260,7 @@ const CostInputPanel = ({
     }
   }, [currentOpenDropdown, closeAllDropdowns, openDropdown]);
 
+  // Toggles the visibility of the period selection dropdown
   const handlePeriodDropdownToggle = useCallback((e) => {
     try {
       e?.stopPropagation();
@@ -211,6 +275,7 @@ const CostInputPanel = ({
     }
   }, [currentOpenDropdown, closeAllDropdowns, openDropdown]);
 
+  // Updates the selected currency
   const handleCurrencySelect = useCallback((currencyValue) => {
     try {
       setState(prev => ({ ...prev, currency: currencyValue }));
@@ -220,6 +285,7 @@ const CostInputPanel = ({
     }
   }, [closeAllDropdowns]);
 
+  // Updates the selected time period
   const handlePeriodSelect = useCallback((periodValue) => {
     try {
       setState(prev => ({ ...prev, period: periodValue }));
@@ -230,6 +296,7 @@ const CostInputPanel = ({
   }, [closeAllDropdowns]);
 
   // Enhanced currency formatting
+  // Formats a number as a currency string (e.g., 1000 -> "$1,000") based on the selected currency
   const formatCurrency = useCallback((value) => {
     try {
       const currencyData = currencies?.find(c => c?.value === state?.currency);
@@ -252,6 +319,7 @@ const CostInputPanel = ({
   }, [currencies, state?.currency]);
 
   // Category toggle handler
+  // Expands or collapses a category section in the UI
   const toggleCategory = useCallback((category, value) => {
     try {
       setState(prev => ({
@@ -266,6 +334,7 @@ const CostInputPanel = ({
     }
   }, []);
 
+  // Toggles the modal for adding a new custom category
   const toggleCustomCategoryModal = useCallback(() => {
     setState(prev => ({
       ...prev,
@@ -274,6 +343,7 @@ const CostInputPanel = ({
   }, []);
 
   // Slider change handler
+  // Called when a slider value changes. Converts input to number and calls the debounced updater.
   const handleSliderChange = useCallback((category, field, value) => {
     const numValue = parseFloat(value);
     if (!isNaN(numValue) && numValue >= 0) {
@@ -282,6 +352,7 @@ const CostInputPanel = ({
   }, [debouncedCostChange]);
 
   // Quantity change handler
+  // Called when the quantity of an item changes. Validates and updates the cost.
   const handleQuantityChange = useCallback((category, field, quantity) => {
     const numQuantity = parseInt(quantity);
     if (ValidationUtils?.validateEmployeeCount(numQuantity) || numQuantity === 0) {
@@ -291,6 +362,7 @@ const CostInputPanel = ({
   }, [debouncedCostChange, getQuantityFieldPath]);
 
   // Custom amount handlers
+  // Opens the modal to enter a specific numeric amount manually
   const handleCustomAmountClick = useCallback((category, field, currentValue) => {
     try {
       setState(prev => ({
@@ -304,6 +376,7 @@ const CostInputPanel = ({
     }
   }, []);
 
+  // Saves the manually entered amount from the modal
   const saveCustomAmount = useCallback(() => {
     try {
       const { customAmountTarget, customAmount } = state;
@@ -331,6 +404,7 @@ const CostInputPanel = ({
     }
   }, [state, handleSliderChange]);
 
+  // Closes the custom amount modal without saving
   const closeCustomAmountModal = useCallback(() => {
     setState(prev => ({
       ...prev,
@@ -342,6 +416,7 @@ const CostInputPanel = ({
   }, []);
 
   // ENHANCED: Get cost value with proper type checking
+  // Retrieves the current numeric value for a specific cost item
   const getCostValue = useCallback((category, field) => {
     try {
       if (!field) return 0;
@@ -363,6 +438,7 @@ const CostInputPanel = ({
   }, [getCategoryData]);
 
   // ENHANCED: Get quantity value with proper validation  
+  // Retrieves the current quantity count for a specific cost item
   const getQuantityValue = useCallback((category, field) => {
     try {
       if (!field) return 1;
@@ -378,6 +454,7 @@ const CostInputPanel = ({
   }, [getCategoryData, getQuantityFieldPath]);
 
   // ENHANCED: Slider input with proper error handling and remove functionality
+  // Renders a single cost item row with a slider, quantity controls, and action buttons
   const renderSliderInput = useCallback((category, field, defaultValue, min, max, step, label, unit, disabled = false) => {
     const errorKey = `${category}.${field}`;
     const hasError = state?.errors?.[errorKey];
@@ -539,6 +616,7 @@ const CostInputPanel = ({
   // Helper to get expanded state
   const expandedCategories = useMemo(() => state?.expandedCategories, [state?.expandedCategories]);
 
+  // Adds a pre-defined template item to a category
   const handleTemplateItemAdd = useCallback((categoryPath, templateItem) => {
     if (!templateItem?.value) return;
     const rootCategory = getRootCategory(categoryPath);
@@ -571,6 +649,7 @@ const CostInputPanel = ({
   }, [onCostChange, getRootCategory]);
 
   // ENHANCED: Category section with improved item counting
+  // Renders a collapsible section for a cost category (e.g., "Marketing") containing all its items
   const renderCategorySection = useCallback(({
     categoryKey,
     categoryPath = categoryKey,
@@ -583,6 +662,7 @@ const CostInputPanel = ({
     const categoryData = getCategoryData(categoryPath);
     const rootCategory = getRootCategory(categoryPath);
 
+    // Calculate the list of items to display in this category
     const derivedItems = (() => {
       try {
         if (!categoryData || typeof categoryData !== 'object') return [];
@@ -622,6 +702,7 @@ const CostInputPanel = ({
     
     return (
       <div key={categoryKey} className="space-y-4 mb-6">
+        {/* Category Header Button */}
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -659,6 +740,7 @@ const CostInputPanel = ({
             </Button>
           )}
         </div>
+        {/* Expanded Content */}
         {isExpanded && (
           <div className="space-y-4 pl-4">
             {itemsToRender?.length === 0 && (
@@ -738,6 +820,7 @@ const CostInputPanel = ({
   }, [expandedCategories, toggleCategory, renderSliderInput, state?.currency, getCategoryData, getRootCategory, handleTemplateItemAdd]);
 
   // ENHANCED: Add category handler with proper validation
+  // Creates a new custom category based on user input
   const handleAddCategory = useCallback(() => {
     try {
       const { newCategoryName, newCategoryType } = state;
@@ -777,6 +860,7 @@ const CostInputPanel = ({
     }
   }, [state, onCostChange, onAddCategory]);
 
+  // Activates a standard category from the library
   const handleStandardCategoryAdd = useCallback((categoryKey) => {
     if (!onAddStandardCategory) return;
     onAddStandardCategory(categoryKey);
@@ -786,6 +870,7 @@ const CostInputPanel = ({
     }));
   }, [onAddStandardCategory]);
 
+  // Removes a category and all its items
   const handleDeleteCategory = useCallback((categoryKey, categoryPath, title) => {
     if (!onRemoveCategory) return;
     const label = title || formatKeyLabel(categoryKey);
@@ -800,6 +885,7 @@ const CostInputPanel = ({
   }, [onRemoveCategory]);
 
   // FIXED: Add item handler with proper nested structure using onCostChange
+  // Creates a new custom item within a selected category
   const handleAddItem = useCallback(() => {
     try {
       const { selectedCategory, newItemForm } = state;
@@ -860,7 +946,7 @@ const CostInputPanel = ({
   return (
     <ErrorBoundary fallback={<div className="text-red-500">Something went wrong. Please refresh.</div>}>
       <div ref={containerRef} className="bg-card border border-border rounded-lg p-6 relative">
-        {/* Loading Overlay */}
+        {/* Loading Overlay: Blocks interaction when data is processing */}
         {state?.isLoading && (
           <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-40 flex items-center justify-center">
             <div className="flex items-center space-x-2">
@@ -870,7 +956,7 @@ const CostInputPanel = ({
           </div>
         )}
 
-        {/* Header with controls */}
+        {/* Header with controls: Title, Currency Selector, Period Selector, Add Category Button */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-3">
             <Icon name="Calculator" size={20} className="text-primary" />
@@ -969,7 +1055,7 @@ const CostInputPanel = ({
           </div>
         </div>
 
-        {/* Category Library */}
+        {/* Category Library: Shows available standard categories that can be added */}
         {standardCategoryList?.length > 0 && (
           <div className="bg-muted/20 border border-border rounded-lg p-4 mb-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1036,7 +1122,7 @@ const CostInputPanel = ({
           </div>
         )}
 
-        {/* Error Messages */}
+        {/* Error Messages: Displays any validation errors */}
         {Object.keys(state?.errors)?.length > 0 && (
           <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 mb-6">
             <h4 className="text-sm font-semibold text-destructive mb-2 flex items-center">
@@ -1051,7 +1137,7 @@ const CostInputPanel = ({
           </div>
         )}
 
-        {/* Add Category Modal */}
+        {/* Add Category Modal: Popup form to create a new category */}
         {state?.showAddCategory && (
           <div className="bg-primary/5 border-2 border-primary/20 rounded-lg p-6 space-y-4 mb-6">
             <h4 className="text-lg font-semibold text-foreground flex items-center">
@@ -1110,7 +1196,7 @@ const CostInputPanel = ({
           </div>
         )}
 
-        {/* Custom Amount Modal */}
+        {/* Custom Amount Modal: Popup to enter a specific numeric value */}
         {state?.showCustomAmountModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div 
@@ -1213,7 +1299,7 @@ const CostInputPanel = ({
           </div>
         )}
 
-        {/* Add Item Modal */}
+        {/* Add Item Modal: Popup form to add a new item to a category */}
         {state?.showAddItemModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div 
@@ -1295,6 +1381,7 @@ const CostInputPanel = ({
           </div>
         )}
 
+        {/* Render Active Categories: Loops through and displays all active categories */}
         {activeStandardCategoryKeys?.map(categoryKey => {
           const config = standardCategories?.[categoryKey];
           if (!config) return null;
