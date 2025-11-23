@@ -995,7 +995,7 @@ const FinancialModelingHub = () => {
               <Icon name="Zap" size={16} className="text-primary" />
               <h4 className="text-sm font-semibold text-foreground">Quick Actions</h4>
             </div>
-            
+
           {/* Scenario Controls - Full Width */}
           <div>
             <ScenarioControls
