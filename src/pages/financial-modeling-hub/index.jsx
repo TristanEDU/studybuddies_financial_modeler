@@ -19,6 +19,7 @@ import { FileImportUtils } from '../../utils/fileImportUtils';
 import PricingTierEditor from '../../components/ui/PricingTierEditor';
 import { STANDARD_CATEGORY_CONFIGS, createDefaultCostStructure } from '../../config/financialDefaults';
 
+
 const FinancialModelingHub = () => {
   const { user, isAuthenticated, loading: authLoading } = useAuth();
   const navigate = useNavigate();

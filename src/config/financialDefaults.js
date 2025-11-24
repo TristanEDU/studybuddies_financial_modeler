@@ -2,23 +2,23 @@ export const personnelItems = [
 	{
 		value: "employees.roles.ceo",
 		label: "CEO",
-		defaultValue: 25000,
+		defaultValue: 0,
 		minValue: 0,
 		maxValue: 100000,
-		step: 1000,
+		step: 10,
 	},
 	{
 		value: "employees.roles.cto",
 		label: "CTO",
-		defaultValue: 20000,
+		defaultValue: 0,
 		minValue: 0,
 		maxValue: 80000,
-		step: 1000,
+		step: 10,
 	},
 	{
 		value: "employees.roles.senior-dev",
 		label: "Senior Developer",
-		defaultValue: 12000,
+		defaultValue: 0,
 		minValue: 0,
 		maxValue: 30000,
 		step: 500,
@@ -65,7 +65,7 @@ export const personnelItems = [
 	},
 ];
 
-export const operationsItems = [
+/* export const operationsItems = [
 	{
 		value: "items.rent",
 		label: "Office Rent",
@@ -114,7 +114,7 @@ export const operationsItems = [
 		maxValue: 2500,
 		step: 100,
 	},
-];
+]; */
 
 export const marketingItems = [
 	{
@@ -219,13 +219,13 @@ export const technologyItems = [
 ];
 
 export const STANDARD_CATEGORY_CONFIGS = {
-	personnel: {
+	/* personnel: {
 		key: "personnel",
 		label: "Personnel",
 		title: "Personnel Costs",
 		description: "Team salaries, roles, and contractors",
 		iconName: "Users",
-		defaultItems: personnelItems,
+		defaultItems: '',
 		createInitialData: () => ({
 			employees: { roles: {} },
 			contractors: { enabled: false, types: {} },
@@ -257,7 +257,7 @@ export const STANDARD_CATEGORY_CONFIGS = {
 		iconName: "Server",
 		defaultItems: technologyItems,
 		createInitialData: () => ({ items: {} }),
-	},
+	}, */
 };
 
 export const createDefaultCostStructure = () => ({

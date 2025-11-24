@@ -189,7 +189,7 @@ BEGIN
          false, false, '', null, '', null, '', '', null, '', 0, '', null, null, '', '', null);
 
     -- Create sample scenario
-    INSERT INTO public.financial_scenarios (id, user_id, name, description, cost_data, pricing_data)
+   /*  INSERT INTO public.financial_scenarios (id, user_id, name, description, cost_data, pricing_data)
     VALUES (
         scenario_uuid, 
         admin_uuid, 
@@ -210,5 +210,5 @@ BEGIN
     VALUES 
         (category1_uuid, admin_uuid, 'Senior Developer', 8000.00, 4000.00, 15000.00, 500.00, '{"count": 2}'::jsonb),
         (category1_uuid, admin_uuid, 'UI Designer', 6500.00, 3500.00, 12000.00, 500.00, '{"count": 1}'::jsonb),
-        (category2_uuid, admin_uuid, 'Digital Advertising', 15000.00, 1000.00, 100000.00, 1000.00, '{"platform": "Google Ads"}'::jsonb);
+        (category2_uuid, admin_uuid, 'Digital Advertising', 15000.00, 1000.00, 100000.00, 1000.00, '{"pl atform": "Google Ads"}'::jsonb);*/
 END $$;
