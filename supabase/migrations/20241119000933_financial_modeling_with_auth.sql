@@ -163,9 +163,9 @@ DO $$
 DECLARE
     admin_uuid UUID := gen_random_uuid();
     user_uuid UUID := gen_random_uuid();
-    scenario_uuid UUID := gen_random_uuid();
-    category1_uuid UUID := gen_random_uuid();
-    category2_uuid UUID := gen_random_uuid();
+    -- scenario_uuid UUID := gen_random_uuid();
+    -- category1_uuid UUID := gen_random_uuid();
+    -- category2_uuid UUID := gen_random_uuid();
 BEGIN
     -- Create auth users with complete field structure
     INSERT INTO auth.users (

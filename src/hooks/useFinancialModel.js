@@ -9,7 +9,7 @@ import {
 export const useFinancialModel = (user) => {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
-	const [costs, setCosts] = useState(() => createDefaultCostStructure());
+	const [costs, setCosts] = useState((null));/*  => createDefaultCostStructure()) */
 	const [scenarios, setScenarios] = useState([]);
 	const [activeScenario, setActiveScenario] = useState(null);
 	const [pricingScenarios, setPricingScenarios] = useState([
@@ -68,12 +68,22 @@ export const useFinancialModel = (user) => {
 	);
 
 	// Helper function to validate and structure cost data
-	const validateAndStructureCostData = (rawCostData) => {
+/* 	const validateAndStructureCostData = (rawCostData) => {
 		if (!rawCostData || typeof rawCostData !== "object") {
 			return createDefaultCostStructure();
 		}
 
-		const structuredData = {};
+		const structuredData = {}; */
+
+		const validateAndStructureCostData = (data) => {
+  // If no data, return empty - don't create defaults
+  if (!data) {
+    return null; // or {} depending on your choice above
+  }
+  
+  // Don't merge with defaults - just return what's in database
+  return data;
+
 
 		Object.entries(rawCostData).forEach(([categoryKey, categoryData]) => {
 			if (!categoryData || typeof categoryData !== "object") return;
@@ -136,10 +146,14 @@ export const useFinancialModel = (user) => {
 					);
 				}
 			} else {
-				const defaultScenario = {
+				setActiveScenario(null);
+				setCosts(null);
+				setPricingScenarios([]);
+				// setHasScenarios(false);
+			 	const defaultScenario = {
 					name: "My First Scenario",
 					description: "Default financial model to get started",
-					costData: createDefaultCostStructure(),
+					costData: createDefaultCostStructure(null),
 					pricingData: {
 						activePricing: "standard",
 						tiers: pricingScenarios,

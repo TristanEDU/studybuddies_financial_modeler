@@ -261,5 +261,5 @@ export const STANDARD_CATEGORY_CONFIGS = {
 };
 
 export const createDefaultCostStructure = () => ({
-	customCategories: {},
+	customCategories: null,
 });
