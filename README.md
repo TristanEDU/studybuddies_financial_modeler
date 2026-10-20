@@ -276,7 +276,11 @@ npx supabase db push
 
 #### Step 4: Configure Environment Variables
 
-Create a `.env` file in the project root:
+Copy the safe template, then fill in your Supabase public client configuration:
+
+```bash
+cp .env.example .env.local
+```
 
 ```bash
 # Supabase Configuration
@@ -290,7 +294,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key-here
 2. Copy "Project URL" → `VITE_SUPABASE_URL`
 3. Copy "anon public" key → `VITE_SUPABASE_ANON_KEY`
 
-⚠️ **Security Note:** Never commit `.env` to version control. It's already in `.gitignore`.
+⚠️ **Security Note:** `.env` and `.env.*` are ignored; only `.env.example` is tracked. Vite exposes `VITE_*` values to the browser, so use only public client configuration here. Keep OpenAI and other provider secrets in server-side secret storage, never in `VITE_*` variables.
 
 #### Step 5: Deploy OpenAI Proxy Edge Function (Optional)
 
