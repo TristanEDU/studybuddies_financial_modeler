@@ -6,3 +6,8 @@ package-lock.json
 .vscode/
 .idea/
 vite.config.*s.*
+
+# Environment files can contain credentials. Commit only the safe template.
+.env
+.env.*
+!.env.example
