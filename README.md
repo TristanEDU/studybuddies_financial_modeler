@@ -294,7 +294,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key-here
 2. Copy "Project URL" → `VITE_SUPABASE_URL`
 3. Copy "anon public" key → `VITE_SUPABASE_ANON_KEY`
 
-⚠️ **Security Note:** `.env` and `.env.*` are ignored; only `.env.example` is tracked. Vite exposes `VITE_*` values to the browser, so use only public client configuration here. Keep OpenAI and other provider secrets in server-side secret storage, never in `VITE_*` variables.
+⚠️ **Security Note:** `.env` and `.env.*` are ignored except the safe `.env.example` template and root `.env.production`. The production file intentionally contains only the public Supabase URL and anon key so the hosted application can connect; never add provider secrets or service-role keys to it. Vite exposes `VITE_*` values to the browser, so use only public client configuration here. Keep OpenAI and other provider secrets in server-side secret storage, never in `VITE_*` variables.
 
 #### Step 5: Deploy OpenAI Proxy Edge Function (Optional)
 

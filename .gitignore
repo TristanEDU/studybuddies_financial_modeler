@@ -7,7 +7,8 @@ package-lock.json
 .idea/
 vite.config.*s.*
 
-# Environment files can contain credentials. Commit only the safe template.
+# Environment files can contain credentials. Keep only reviewed public config.
 .env
 .env.*
 !.env.example
+!/.env.production
